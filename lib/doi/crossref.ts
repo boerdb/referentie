@@ -9,12 +9,18 @@ import {
 export { cleanDoiForLookup, doiLookupCandidates, normalizeDoi };
 
 const CACHE_TTL = 60 * 60 * 24;
-const LOOKUP_MS = 12_000;
+const LOOKUP_MS = 15_000;
+
+type DateParts = { "date-parts"?: number[][] };
 
 type CrossrefWork = {
   title?: string[];
   author?: { given?: string; family?: string }[];
-  published?: { "date-parts"?: number[][] };
+  published?: DateParts;
+  "published-print"?: DateParts;
+  "published-online"?: DateParts;
+  issued?: DateParts;
+  created?: DateParts;
   "container-title"?: string[];
   volume?: string;
   issue?: string;
@@ -33,7 +39,8 @@ type CslWork = {
   volume?: string | number;
   issue?: string | number;
   page?: string;
-  issued?: { "date-parts"?: number[][] };
+  issued?: DateParts;
+  published?: DateParts;
   author?: { given?: string; family?: string }[];
 };
 
@@ -42,7 +49,24 @@ function stripAbstractHtml(html: string): string {
 }
 
 function yearFromParts(parts?: number[][]): number | null {
-  return parts?.[0]?.[0] ?? null;
+  const y = parts?.[0]?.[0];
+  return typeof y === "number" && y > 1000 ? y : null;
+}
+
+function yearFromWork(work: {
+  published?: DateParts;
+  "published-print"?: DateParts;
+  "published-online"?: DateParts;
+  issued?: DateParts;
+  created?: DateParts;
+}): number | null {
+  return (
+    yearFromParts(work.issued?.["date-parts"]) ??
+    yearFromParts(work.published?.["date-parts"]) ??
+    yearFromParts(work["published-print"]?.["date-parts"]) ??
+    yearFromParts(work["published-online"]?.["date-parts"]) ??
+    yearFromParts(work.created?.["date-parts"])
+  );
 }
 
 function firstString(value: string | string[] | undefined): string | null {
@@ -57,7 +81,7 @@ function mapWork(work: CrossrefWork): ReferenceInput {
     type: "article",
     title: work.title?.[0]?.trim() ?? "Zonder titel",
     abstract: work.abstract ? stripAbstractHtml(work.abstract) : null,
-    year: yearFromParts(work.published?.["date-parts"]),
+    year: yearFromWork(work),
     journal: work["container-title"]?.[0]?.trim() ?? null,
     volume: work.volume ?? null,
     issue: work.issue ?? null,
@@ -77,7 +101,7 @@ function mapCsl(work: CslWork): ReferenceInput {
     type: "article",
     title: firstString(work.title) ?? "Zonder titel",
     abstract: work.abstract ? stripAbstractHtml(work.abstract) : null,
-    year: yearFromParts(work.issued?.["date-parts"]),
+    year: yearFromWork(work),
     journal: firstString(work["container-title"]),
     volume: work.volume != null ? String(work.volume) : null,
     issue: work.issue != null ? String(work.issue) : null,
@@ -92,30 +116,45 @@ function mapCsl(work: CslWork): ReferenceInput {
   };
 }
 
-async function fetchJson(url: string, headers: Record<string, string>): Promise<Response> {
-  return fetch(url, {
+async function fetchJson(
+  url: string,
+  headers: Record<string, string>,
+): Promise<Response> {
+  const request = fetch(url, {
     headers,
-    cache: "no-store",
-    signal: AbortSignal.timeout(LOOKUP_MS),
+    redirect: "follow",
+    next: { revalidate: 0 },
   });
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("Timeout bij metadata ophalen.")), LOOKUP_MS);
+  });
+  return Promise.race([request, timeout]);
+}
+
+function crossrefUrls(doi: string): string[] {
+  const encoded = `https://api.crossref.org/works/${encodeURIComponent(doi)}`;
+  const raw = `https://api.crossref.org/works/${doi}`;
+  return encoded === raw ? [encoded] : [encoded, raw];
 }
 
 async function fetchFromCrossref(doi: string): Promise<ReferenceInput> {
-  const res = await fetchJson(
-    `https://api.crossref.org/works/${encodeURIComponent(doi)}`,
-    {
-      Accept: "application/json",
-      "User-Agent": "ReferentiePWA/1.0 (mailto:support@clvs.nl)",
-    },
-  );
-  if (!res.ok) {
-    if (res.status === 404) throw new Error("DOI niet gevonden bij Crossref.");
-    throw new Error(`Crossref gaf HTTP ${res.status}.`);
+  const headers = {
+    Accept: "application/json",
+    "User-Agent": "ReferentiePWA/1.0 (mailto:support@clvs.nl)",
+  };
+  let lastStatus = 0;
+  for (const url of crossrefUrls(doi)) {
+    const res = await fetchJson(url, headers);
+    lastStatus = res.status;
+    if (res.status === 404) continue;
+    if (!res.ok) continue;
+    const json = (await res.json()) as { message?: CrossrefWork };
+    const work = json.message;
+    if (!work) continue;
+    return mapWork(work);
   }
-  const json = (await res.json()) as { message?: CrossrefWork };
-  const work = json.message;
-  if (!work) throw new Error("Geen metadata ontvangen.");
-  return mapWork(work);
+  if (lastStatus === 404) throw new Error("DOI niet gevonden bij Crossref.");
+  throw new Error(`Crossref gaf HTTP ${lastStatus || "geen antwoord"}.`);
 }
 
 async function fetchFromDoiOrg(doi: string): Promise<ReferenceInput> {
@@ -137,22 +176,38 @@ async function fetchFromDoiOrg(doi: string): Promise<ReferenceInput> {
   return mapCsl(work);
 }
 
-async function fetchMetadataByDoiOnce(doi: string): Promise<ReferenceInput> {
-  const cacheKey = `doi:${doi.toLowerCase()}`;
-  const cached = await redisGet<ReferenceInput>(cacheKey);
-  if (cached) return cached;
+async function cachedGet(doi: string): Promise<ReferenceInput | null> {
+  try {
+    return await redisGet<ReferenceInput>(`doi:${doi.toLowerCase()}`);
+  } catch (e) {
+    console.warn("[doi-cache get]", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
 
-  let lastErr: Error | null = null;
+async function cachedSet(doi: string, value: ReferenceInput): Promise<void> {
+  try {
+    await redisSetEx(`doi:${doi.toLowerCase()}`, value, CACHE_TTL);
+  } catch (e) {
+    console.warn("[doi-cache set]", e instanceof Error ? e.message : e);
+  }
+}
+
+async function fetchMetadataByDoiOnce(doi: string): Promise<ReferenceInput> {
+  const cached = await cachedGet(doi);
+  if (cached?.title) return cached;
+
+  const errors: string[] = [];
   for (const fn of [fetchFromCrossref, fetchFromDoiOrg]) {
     try {
       const mapped = await fn(doi);
-      await redisSetEx(cacheKey, mapped, CACHE_TTL);
+      await cachedSet(doi, mapped);
       return mapped;
     } catch (e) {
-      lastErr = e instanceof Error ? e : new Error("DOI ophalen mislukt.");
+      errors.push(e instanceof Error ? e.message : "onbekend");
     }
   }
-  throw lastErr ?? new Error("DOI ophalen mislukt.");
+  throw new Error(errors[errors.length - 1] ?? "DOI ophalen mislukt.");
 }
 
 export async function fetchMetadataByDoi(

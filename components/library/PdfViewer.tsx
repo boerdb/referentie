@@ -8,59 +8,44 @@ type Props = {
 };
 
 export function PdfViewer({ url, title }: Props) {
+  const measureRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
-  const [renderWidth, setRenderWidth] = useState(0);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const measure = measureRef.current;
+    const container = containerRef.current;
+    if (!measure || !container) return;
 
-    let timer = 0;
-    const update = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        const w = Math.floor(el.clientWidth);
-        if (w < 80) return;
-        setRenderWidth((prev) => (Math.abs(prev - w) < 8 ? prev : w));
-      }, 80);
-    };
-
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => {
-      window.clearTimeout(timer);
-      ro.disconnect();
-    };
-  }, [url]);
-
-  useEffect(() => {
-    if (renderWidth < 80) return;
     let cancelled = false;
+    let timer = 0;
+    let inFlight = false;
+    let queuedWidth = 0;
+    let lastWidth = 0;
+    let generation = 0;
 
-    async function renderPdf() {
-      const container = containerRef.current;
-      if (!container) return;
-      setStatus("loading");
+    async function renderAt(width: number) {
+      if (cancelled || width < 80) return;
+      inFlight = true;
+      const gen = ++generation;
       setError(null);
-      container.replaceChildren();
+      if (container.childElementCount === 0) setStatus("loading");
 
       try {
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
         const doc = await pdfjs.getDocument({ url, withCredentials: true }).promise;
-        if (cancelled) {
+        if (cancelled || gen !== generation) {
           await doc.destroy();
           return;
         }
 
-        const width = renderWidth;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const frag = document.createDocumentFragment();
 
         for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-          if (cancelled) break;
+          if (cancelled || gen !== generation) break;
           const page = await doc.getPage(pageNum);
           const base = page.getViewport({ scale: 1 });
           const scale = (width / base.width) * dpr;
@@ -74,26 +59,59 @@ export function PdfViewer({ url, title }: Props) {
           canvas.style.marginBottom = "8px";
           canvas.dataset.page = String(pageNum);
           canvas.setAttribute("aria-label", `${title} — pagina ${pageNum}`);
-          container.appendChild(canvas);
           const ctx = canvas.getContext("2d");
-          if (!ctx) continue;
-          await page.render({ canvasContext: ctx, viewport }).promise;
+          if (ctx) await page.render({ canvasContext: ctx, viewport }).promise;
+          frag.appendChild(canvas);
         }
 
-        if (!cancelled) setStatus("ready");
+        if (!cancelled && gen === generation) {
+          container.replaceChildren(frag);
+          setStatus("ready");
+        }
         await doc.destroy();
       } catch (err) {
-        if (cancelled) return;
+        if (cancelled || gen !== generation) return;
         setError(err instanceof Error ? err.message : "PDF laden mislukt");
         setStatus("error");
+      } finally {
+        inFlight = false;
+        if (!cancelled && queuedWidth >= 80 && Math.abs(queuedWidth - lastWidth) >= 24) {
+          const next = queuedWidth;
+          queuedWidth = 0;
+          lastWidth = next;
+          void renderAt(next);
+        }
       }
     }
 
-    void renderPdf();
+    const schedule = () => {
+      const w = Math.floor(measure.clientWidth);
+      if (w < 80) return;
+      if (lastWidth > 0 && Math.abs(w - lastWidth) < 24) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const w2 = Math.floor(measure.clientWidth);
+        if (w2 < 80) return;
+        if (lastWidth > 0 && Math.abs(w2 - lastWidth) < 24) return;
+        if (inFlight) {
+          queuedWidth = w2;
+          return;
+        }
+        lastWidth = w2;
+        void renderAt(w2);
+      }, 180);
+    };
+
+    schedule();
+    const ro = new ResizeObserver(schedule);
+    ro.observe(measure);
     return () => {
       cancelled = true;
+      generation += 1;
+      window.clearTimeout(timer);
+      ro.disconnect();
     };
-  }, [url, title, renderWidth]);
+  }, [url, title]);
 
   return (
     <div
@@ -113,11 +131,6 @@ export function PdfViewer({ url, title }: Props) {
           Openen
         </a>
       </div>
-      {status === "loading" && (
-        <p className="hidden p-4 text-center text-sm lg:block" style={{ color: "var(--pdf-chrome)" }}>
-          PDF laden…
-        </p>
-      )}
       {status === "error" && (
         <div className="space-y-2 p-4 text-center text-sm text-[var(--danger)]">
           <p>{error}</p>
@@ -126,10 +139,21 @@ export function PdfViewer({ url, title }: Props) {
           </a>
         </div>
       )}
-      <div
-        ref={containerRef}
-        className="min-h-0 flex-1 overflow-auto p-2 [-webkit-overflow-scrolling:touch]"
-      />
+      <div ref={measureRef} className="relative min-h-0 flex-1 overflow-hidden">
+        {status === "loading" && (
+          <p
+            className="pointer-events-none absolute inset-x-0 top-3 z-10 text-center text-sm"
+            style={{ color: "var(--pdf-chrome)" }}
+          >
+            PDF laden…
+          </p>
+        )}
+        <div
+          ref={containerRef}
+          className="h-full overflow-auto p-2 [-webkit-overflow-scrolling:touch]"
+          style={{ scrollbarGutter: "stable" }}
+        />
+      </div>
     </div>
   );
 }

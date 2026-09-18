@@ -2,6 +2,7 @@
 export function normalizeDoi(raw: string): string {
   return raw
     .trim()
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")
     .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
     .replace(/^doi:\s*/i, "")
     .trim();

@@ -955,7 +955,10 @@ export function LibraryApp({ user }: Props) {
                   title={selected.title}
                 />
               ) : (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-sm text-[var(--text-muted)]">
+                <div
+                  className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-sm text-[var(--text-muted)]"
+                  style={{ background: "var(--pdf-bg)" }}
+                >
                   <p>Geen PDF — upload of sleep een PDF op de bibliotheek</p>
                   <p className="text-xs">Nieuwe PDF → automatisch artikel + DOI/Crossref</p>
                 </div>
