@@ -172,6 +172,27 @@ export async function getReference(
   return mapRow(row, authors);
 }
 
+export async function getReferenceByDoi(
+  userId: string,
+  doi: string,
+): Promise<ReferenceRecord | null> {
+  const pool = getPool();
+  const normalized = doi.trim().toLowerCase();
+  const [rows] = await pool.query<RefRow[]>(
+    `SELECT r.*,
+      EXISTS (SELECT 1 FROM attachments att WHERE att.reference_id = r.id) AS has_pdf,
+      (SELECT att.id FROM attachments att WHERE att.reference_id = r.id LIMIT 1) AS attachment_id
+     FROM ref_items r
+     WHERE r.user_id = ? AND LOWER(r.doi) = ?
+     LIMIT 1`,
+    [userId, normalized],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const authors = await loadAuthors(row.id);
+  return mapRow(row, authors);
+}
+
 export async function createReference(
   userId: string,
   input: ReferenceInput,

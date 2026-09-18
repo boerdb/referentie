@@ -52,8 +52,11 @@ export function LibraryApp({ user }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
+  const [pdfDropActive, setPdfDropActive] = useState(false);
+  const [pdfImporting, setPdfImporting] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pdfDropDepth = useRef(0);
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
@@ -241,6 +244,77 @@ export function LibraryApp({ user }: Props) {
     await load();
   }
 
+  async function importPdfAsReference(file: File) {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      alert("Alleen PDF-bestanden.");
+      return;
+    }
+    setPdfImporting(true);
+    const fd = new FormData();
+    fd.set("file", file);
+    try {
+      const res = await fetch("/api/references/from-pdf", {
+        method: "POST",
+        body: fd,
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        item?: ReferenceRecord;
+        message?: string;
+      };
+      if (!res.ok) {
+        alert(data.error ?? "Import mislukt");
+        return;
+      }
+      await load();
+      if (data.item) {
+        setSelectedId(data.item.id);
+        setMobilePane("detail");
+      }
+      if (data.message) alert(data.message);
+    } catch {
+      alert("Import mislukt — geen verbinding.");
+    } finally {
+      setPdfImporting(false);
+    }
+  }
+
+  function onPdfDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    pdfDropDepth.current += 1;
+    if (e.dataTransfer.types.includes("Files")) setPdfDropActive(true);
+  }
+
+  function onPdfDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    pdfDropDepth.current -= 1;
+    if (pdfDropDepth.current <= 0) {
+      pdfDropDepth.current = 0;
+      setPdfDropActive(false);
+    }
+  }
+
+  function onPdfDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  async function onPdfDrop(e: React.DragEvent) {
+    e.preventDefault();
+    pdfDropDepth.current = 0;
+    setPdfDropActive(false);
+    const files = [...e.dataTransfer.files].filter(
+      (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+    );
+    if (files.length === 0) {
+      alert("Sleep een PDF-bestand.");
+      return;
+    }
+    for (const file of files) {
+      await importPdfAsReference(file);
+    }
+  }
+
   async function toggleStar() {
     if (!selected) return;
     await fetch(`/api/references/${selected.id}`, {
@@ -347,7 +421,8 @@ export function LibraryApp({ user }: Props) {
         )}
         {!loading && items.length === 0 && (
           <p className="p-6 text-sm text-[var(--text-muted)]">
-            Nog geen artikelen. Plak een DOI (Ctrl+K) of voeg handmatig toe.
+            Nog geen artikelen. Sleep een PDF hierheen, plak een DOI (Ctrl+K) of voeg
+            handmatig toe.
           </p>
         )}
         {items.map((item) => (
@@ -538,8 +613,9 @@ export function LibraryApp({ user }: Props) {
                   title={selected.title}
                 />
               ) : (
-                <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-[var(--border)] text-sm text-[var(--text-muted)]">
-                  Geen PDF — upload een bestand
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-sm text-[var(--text-muted)]">
+                  <p>Geen PDF — upload of sleep een PDF op de bibliotheek</p>
+                  <p className="text-xs">Nieuwe PDF → automatisch artikel + DOI/Crossref</p>
                 </div>
               )}
             </div>
@@ -555,10 +631,28 @@ export function LibraryApp({ user }: Props) {
         <span className="font-semibold">Referentie</span>
         <ThemeSelector variant="icons" />
       </header>
-      <div className="flex min-h-0 flex-1">
+      <div
+        className="relative flex min-h-0 flex-1"
+        onDragEnter={onPdfDragEnter}
+        onDragLeave={onPdfDragLeave}
+        onDragOver={onPdfDragOver}
+        onDrop={(e) => void onPdfDrop(e)}
+      >
         <div className="hidden lg:flex">{sidebar}</div>
         {listPane}
         {inspector}
+        {(pdfDropActive || pdfImporting) && (
+          <div
+            className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-2 border-dashed border-[var(--accent)]"
+            style={{ background: "color-mix(in srgb, var(--accent-soft) 85%, transparent)" }}
+          >
+            <p className="rounded-xl px-6 py-4 text-sm font-medium shadow-lg panel">
+              {pdfImporting
+                ? "PDF importeren — DOI zoeken…"
+                : "PDF loslaten — nieuw artikel met metadata"}
+            </p>
+          </div>
+        )}
       </div>
 
       {paletteOpen && (
