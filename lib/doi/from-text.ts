@@ -1,4 +1,4 @@
-import { cleanDoiForLookup, normalizeDoi } from "@/lib/doi/crossref";
+import { cleanDoiForLookup, normalizeDoi } from "@/lib/doi/normalize";
 
 /** Crossref-achtige DOI in vrije tekst (eerste treffer). */
 const DOI_IN_TEXT =

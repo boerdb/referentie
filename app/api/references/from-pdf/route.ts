@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { checkDoiRateLimit } from "@/lib/auth/rate-limit";
-import { fetchMetadataByDoi, normalizeDoi } from "@/lib/doi/crossref";
+import { cleanDoiForLookup, fetchMetadataByDoi } from "@/lib/doi/crossref";
 import { findDoiInPdfBuffer } from "@/lib/pdf/extract-text";
 import {
   createReference,
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   let importSource: "existing" | "crossref" | "minimal";
 
   if (doi) {
-    const normalized = normalizeDoi(doi);
+    const normalized = cleanDoiForLookup(doi);
     const existing = await getReferenceByDoi(session.userId, normalized);
     if (existing) {
       referenceId = existing.id;

@@ -20,6 +20,7 @@ import type { ReferenceRecord, RefStatus } from "@/lib/references/types";
 import type { SessionPayload } from "@/lib/auth/session";
 import { PdfViewer } from "./PdfViewer";
 import { cn } from "@/lib/utils";
+import { cleanDoiForLookup } from "@/lib/doi/normalize";
 
 type Props = {
   user: SessionPayload;
@@ -282,6 +283,7 @@ export function LibraryApp({ user }: Props) {
       const res = await fetch("/api/references/from-pdf", {
         method: "POST",
         body: fd,
+        credentials: "include",
       });
       const data = (await res.json()) as {
         error?: string;
@@ -393,17 +395,28 @@ export function LibraryApp({ user }: Props) {
     setRefreshingMeta(true);
     try {
       const payload = doiEdit.trim()
-        ? JSON.stringify({ doi: doiEdit.trim() })
+        ? JSON.stringify({ doi: cleanDoiForLookup(doiEdit.trim()) })
         : "{}";
       const res = await fetch(
         `/api/references/${selectedId}/refresh-metadata`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: payload,
         },
       );
-      const data = (await res.json()) as { error?: string; item?: ReferenceRecord };
+      let data: { error?: string; item?: ReferenceRecord } = {};
+      try {
+        data = (await res.json()) as { error?: string; item?: ReferenceRecord };
+      } catch {
+        alert(`Metadata ophalen mislukt (HTTP ${res.status}).`);
+        return;
+      }
+      if (res.status === 401) {
+        alert("Sessie verlopen — log opnieuw in.");
+        return;
+      }
       if (!res.ok) {
         alert(data.error ?? "Metadata ophalen mislukt");
         return;
@@ -824,7 +837,7 @@ export function LibraryApp({ user }: Props) {
                       {selected.doi && (
                         <a
                           className="text-xs text-[var(--accent)] underline"
-                          href={`https://doi.org/${selected.doi.split("/").slice(0, 2).join("/")}`}
+                          href={`https://doi.org/${cleanDoiForLookup(selected.doi)}`}
                           target="_blank"
                           rel="noreferrer"
                         >
