@@ -15,8 +15,11 @@ export function PdfViewer({ url, title }: Props) {
 
   useEffect(() => {
     const measure = measureRef.current;
-    const container = containerRef.current;
-    if (!measure || !container) return;
+    const pages = containerRef.current;
+    if (!measure || !pages) return;
+
+    const measureEl: HTMLDivElement = measure;
+    const pageRoot: HTMLDivElement = pages;
 
     let cancelled = false;
     let timer = 0;
@@ -30,7 +33,7 @@ export function PdfViewer({ url, title }: Props) {
       inFlight = true;
       const gen = ++generation;
       setError(null);
-      if (container.childElementCount === 0) setStatus("loading");
+      if (pageRoot.childElementCount === 0) setStatus("loading");
 
       try {
         const pdfjs = await import("pdfjs-dist");
@@ -65,7 +68,7 @@ export function PdfViewer({ url, title }: Props) {
         }
 
         if (!cancelled && gen === generation) {
-          container.replaceChildren(frag);
+          pageRoot.replaceChildren(frag);
           setStatus("ready");
         }
         await doc.destroy();
@@ -85,12 +88,12 @@ export function PdfViewer({ url, title }: Props) {
     }
 
     const schedule = () => {
-      const w = Math.floor(measure.clientWidth);
+      const w = Math.floor(measureEl.clientWidth);
       if (w < 80) return;
       if (lastWidth > 0 && Math.abs(w - lastWidth) < 24) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        const w2 = Math.floor(measure.clientWidth);
+        const w2 = Math.floor(measureEl.clientWidth);
         if (w2 < 80) return;
         if (lastWidth > 0 && Math.abs(w2 - lastWidth) < 24) return;
         if (inFlight) {
@@ -104,7 +107,7 @@ export function PdfViewer({ url, title }: Props) {
 
     schedule();
     const ro = new ResizeObserver(schedule);
-    ro.observe(measure);
+    ro.observe(measureEl);
     return () => {
       cancelled = true;
       generation += 1;
