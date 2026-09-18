@@ -130,11 +130,18 @@ def main() -> None:
     ssh_db.close()
 
     merge_env_local(ssh_app)
-    run(
-        ssh_app,
-        f'if [ ! -d "{APP_DIR}/.git" ]; then git clone --branch main git@github.com:boerdb/referentie.git {APP_DIR}; fi',
-        check=False,
-    )
+    repo = "git@github.com:boerdb/referentie.git"
+    ensure_repo = f"""
+if [ ! -d "{APP_DIR}/.git" ]; then
+  if [ -d "{APP_DIR}" ]; then
+    mv "{APP_DIR}/.env.local" /tmp/referentie.env.local.bak 2>/dev/null || true
+    rm -rf "{APP_DIR}"
+  fi
+  git clone --branch main {repo} {APP_DIR}
+  mv /tmp/referentie.env.local.bak "{APP_DIR}/.env.local" 2>/dev/null || true
+fi
+"""
+    run(ssh_app, ensure_repo.strip())
     run(
         ssh_app,
         f'cd "{APP_DIR}" && sed -i "s/\\r$//" scripts/deploy.sh && bash scripts/deploy.sh',
