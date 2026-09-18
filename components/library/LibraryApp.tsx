@@ -11,6 +11,7 @@ import {
   Search,
   Star,
   Upload,
+  RefreshCw,
 } from "lucide-react";
 import type { ReferenceRecord, RefStatus } from "@/lib/references/types";
 import type { SessionPayload } from "@/lib/auth/session";
@@ -54,6 +55,7 @@ export function LibraryApp({ user }: Props) {
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
   const [pdfDropActive, setPdfDropActive] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
+  const [refreshingMeta, setRefreshingMeta] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pdfDropDepth = useRef(0);
@@ -315,6 +317,28 @@ export function LibraryApp({ user }: Props) {
     }
   }
 
+  async function refreshMetadataFromDoi() {
+    if (!selectedId) return;
+    setRefreshingMeta(true);
+    try {
+      const res = await fetch(
+        `/api/references/${selectedId}/refresh-metadata`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+      );
+      const data = (await res.json()) as { error?: string; item?: ReferenceRecord };
+      if (!res.ok) {
+        alert(data.error ?? "Metadata ophalen mislukt");
+        return;
+      }
+      await load();
+      if (data.item) setSelectedId(data.item.id);
+    } catch {
+      alert("Metadata ophalen mislukt — geen verbinding.");
+    } finally {
+      setRefreshingMeta(false);
+    }
+  }
+
   async function toggleStar() {
     if (!selected) return;
     await fetch(`/api/references/${selected.id}`, {
@@ -506,17 +530,34 @@ export function LibraryApp({ user }: Props) {
                 {selected.doi && (
                   <div>
                     <dt className="text-[var(--text-muted)]">DOI</dt>
-                    <dd>
+                    <dd className="flex flex-wrap items-center gap-2">
                       <a
-                        className="text-[var(--accent)] underline"
-                        href={`https://doi.org/${selected.doi}`}
+                        className="text-[var(--accent)] underline break-all"
+                        href={`https://doi.org/${selected.doi.split("/").slice(0, 2).join("/")}`}
                         target="_blank"
                         rel="noreferrer"
                       >
                         {selected.doi}
                       </a>
+                      <button
+                        type="button"
+                        className="btn-ghost inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-0.5 text-xs"
+                        disabled={refreshingMeta}
+                        onClick={() => void refreshMetadataFromDoi()}
+                        title="Titel, abstract en overige velden opnieuw via Crossref"
+                      >
+                        <RefreshCw
+                          className={cn("h-3 w-3", refreshingMeta && "animate-spin")}
+                        />
+                        {refreshingMeta ? "Ophalen…" : "Metadata ophalen"}
+                      </button>
                     </dd>
                   </div>
+                )}
+                {!selected.doi && (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Geen DOI — plak een DOI via Ctrl+K of sleep opnieuw een PDF met DOI.
+                  </p>
                 )}
                 {selected.journal && (
                   <div>
@@ -524,12 +565,16 @@ export function LibraryApp({ user }: Props) {
                     <dd>{selected.journal}</dd>
                   </div>
                 )}
-                {selected.abstract && (
-                  <div>
-                    <dt className="text-[var(--text-muted)]">Abstract</dt>
-                    <dd className="leading-relaxed">{selected.abstract}</dd>
-                  </div>
-                )}
+                <div>
+                  <dt className="text-[var(--text-muted)]">Abstract</dt>
+                  <dd className="leading-relaxed">
+                    {selected.abstract || (
+                      <span className="text-[var(--text-muted)]">
+                        Nog leeg — gebruik &quot;Metadata ophalen&quot; bij een geldige DOI.
+                      </span>
+                    )}
+                  </dd>
+                </div>
               </dl>
 
               <div className="mt-4">

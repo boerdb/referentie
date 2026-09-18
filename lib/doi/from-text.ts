@@ -1,4 +1,4 @@
-import { normalizeDoi } from "@/lib/doi/crossref";
+import { cleanDoiForLookup, normalizeDoi } from "@/lib/doi/crossref";
 
 /** Crossref-achtige DOI in vrije tekst (eerste treffer). */
 const DOI_IN_TEXT =
@@ -14,7 +14,7 @@ export function findFirstDoiInText(text: string): string | null {
   let match: RegExpExecArray | null;
   while ((match = DOI_IN_TEXT.exec(text)) !== null) {
     const candidate = trimDoiTail(match[1] ?? match[0]);
-    const normalized = normalizeDoi(candidate);
+    const normalized = cleanDoiForLookup(normalizeDoi(candidate));
     if (normalized.startsWith("10.") && normalized.includes("/")) {
       return normalized;
     }

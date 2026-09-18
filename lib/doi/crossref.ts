@@ -11,6 +11,31 @@ export function normalizeDoi(raw: string): string {
     .trim();
 }
 
+/** Verwijdert veelvoorkomende PDF-artefacten (bijv. /Title… achter de echte DOI). */
+export function cleanDoiForLookup(raw: string): string {
+  const d = normalizeDoi(raw);
+  const parts = d.split("/");
+  if (parts.length >= 3 && /^Title/i.test(parts[2] ?? "")) {
+    return `${parts[0]}/${parts[1]}`;
+  }
+  return d.replace(/\/Title[A-Za-z0-9]*$/i, "");
+}
+
+function doiLookupCandidates(raw: string): string[] {
+  const base = normalizeDoi(raw);
+  const cleaned = cleanDoiForLookup(raw);
+  const out: string[] = [];
+  for (const c of [cleaned, base]) {
+    if (c && !out.includes(c)) out.push(c);
+  }
+  const parts = cleaned.split("/");
+  if (parts.length > 2) {
+    const short = `${parts[0]}/${parts[1]}`;
+    if (!out.includes(short)) out.push(short);
+  }
+  return out;
+}
+
 type CrossrefWork = {
   title?: string[];
   author?: { given?: string; family?: string }[];
@@ -49,14 +74,9 @@ function mapWork(work: CrossrefWork): ReferenceInput {
   };
 }
 
-export async function fetchMetadataByDoi(
-  doiRaw: string,
+async function fetchMetadataByDoiOnce(
+  doi: string,
 ): Promise<ReferenceInput> {
-  const doi = normalizeDoi(doiRaw);
-  if (!doi) {
-    throw new Error("Ongeldige DOI.");
-  }
-
   const cacheKey = `doi:${doi.toLowerCase()}`;
   const cached = await redisGet<ReferenceInput>(cacheKey);
   if (cached) return cached;
@@ -84,4 +104,24 @@ export async function fetchMetadataByDoi(
   const mapped = mapWork(work);
   await redisSetEx(cacheKey, mapped, CACHE_TTL);
   return mapped;
+}
+
+export async function fetchMetadataByDoi(
+  doiRaw: string,
+): Promise<ReferenceInput> {
+  const candidates = doiLookupCandidates(doiRaw);
+  if (candidates.length === 0) {
+    throw new Error("Ongeldige DOI.");
+  }
+
+  let lastErr: Error | null = null;
+  for (const doi of candidates) {
+    try {
+      return await fetchMetadataByDoiOnce(doi);
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error("DOI ophalen mislukt.");
+      if (lastErr.message !== "DOI niet gevonden bij Crossref.") throw lastErr;
+    }
+  }
+  throw lastErr ?? new Error("DOI niet gevonden bij Crossref.");
 }
