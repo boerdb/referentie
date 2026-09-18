@@ -6,10 +6,14 @@ import { getPool } from "@/lib/db/mysql";
 
 const PDF_ROOT = path.join(process.cwd(), "data", "pdfs");
 
+/**
+ * Uploads staan buiten de bundel en het pad is pas op runtime bekend (UPLOAD_DIR).
+ * Zonder `turbopackIgnore` traceert de build daarom het hele project mee.
+ */
 export function getUploadRoot(): string {
   const custom = process.env.UPLOAD_DIR?.trim();
   if (custom && path.isAbsolute(custom)) return custom;
-  if (custom) return path.join(process.cwd(), custom);
+  if (custom) return path.join(/* turbopackIgnore: true */ process.cwd(), custom);
   return PDF_ROOT;
 }
 
@@ -27,12 +31,12 @@ export async function savePdfForReference(
   }
 
   const attachmentId = randomUUID();
-  const dir = path.join(getUploadRoot(), userId);
-  await mkdir(dir, { recursive: true });
+  const dir = path.join(/* turbopackIgnore: true */ getUploadRoot(), userId);
+  await mkdir(/* turbopackIgnore: true */ dir, { recursive: true });
   const fileName = `${attachmentId}.pdf`;
-  const absPath = path.join(dir, fileName);
+  const absPath = path.join(/* turbopackIgnore: true */ dir, fileName);
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(absPath, buffer);
+  await writeFile(/* turbopackIgnore: true */ absPath, buffer);
 
   const storagePath = path.join(userId, fileName).replace(/\\/g, "/");
   const pool = getPool();
@@ -84,8 +88,11 @@ export async function getPdfForUser(
   );
   const row = rows[0];
   if (!row) return null;
-  const absPath = path.join(getUploadRoot(), row.storage_path);
-  const buffer = await readFile(absPath);
+  const absPath = path.join(
+    /* turbopackIgnore: true */ getUploadRoot(),
+    row.storage_path,
+  );
+  const buffer = await readFile(/* turbopackIgnore: true */ absPath);
   return { buffer, fileName: row.original_name || "document.pdf" };
 }
 
@@ -102,7 +109,9 @@ export async function deletePdfFilesForReference(
   );
   for (const row of rows) {
     try {
-      await unlink(path.join(getUploadRoot(), row.storage_path));
+      await unlink(
+        path.join(/* turbopackIgnore: true */ getUploadRoot(), row.storage_path),
+      );
     } catch {
       /* ignore missing file */
     }
