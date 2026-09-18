@@ -45,8 +45,22 @@ export async function getSessionById(
   return redisGet<SessionPayload>(sessionRedisKey(sessionId));
 }
 
+/** Secure cookies werken niet over http:// (LAN); zet COOKIE_SECURE=true achter HTTPS. */
+export function cookieSecure(): boolean {
+  const flag = process.env.COOKIE_SECURE?.trim().toLowerCase();
+  if (flag === "true") return true;
+  if (flag === "false") return false;
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    process.env.NEXTAUTH_URL ??
+    "";
+  if (base.startsWith("https://")) return true;
+  return false;
+}
+
 export function sessionCookieOptions(sessionId: string) {
-  const secure = process.env.NODE_ENV === "production";
+  const secure = cookieSecure();
   return {
     name: SESSION_COOKIE,
     value: sessionId,

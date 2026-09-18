@@ -101,6 +101,7 @@ def merge_env_local(ssh: paramiko.SSHClient) -> None:
     env.setdefault("NODE_ENV", "production")
     env.setdefault("PORT", "3023")
     env.setdefault("REGISTRATION_OPEN", "true")
+    env.setdefault("COOKIE_SECURE", "false")
     env.setdefault("UPLOAD_DIR", "./data/pdfs")
     if not env.get("AUTH_SECRET"):
         env["AUTH_SECRET"] = secrets.token_urlsafe(48)

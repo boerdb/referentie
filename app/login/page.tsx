@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,19 +16,31 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     const path = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-    const res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name }),
-    });
-    const data = (await res.json()) as { error?: string };
-    setLoading(false);
-    if (!res.ok) {
-      setError(data.error ?? "Mislukt");
-      return;
+    try {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
+        credentials: "same-origin",
+      });
+      let data: { error?: string } = {};
+      try {
+        data = (await res.json()) as { error?: string };
+      } catch {
+        setError("Onverwacht antwoord van de server.");
+        return;
+      }
+      if (!res.ok) {
+        setError(data.error ?? "Mislukt");
+        return;
+      }
+      // Volledige navigatie zodat de sessiecookie zeker meekomt
+      window.location.assign("/bibliotheek");
+    } catch {
+      setError("Geen verbinding met de server.");
+    } finally {
+      setLoading(false);
     }
-    router.replace("/bibliotheek");
-    router.refresh();
   }
 
   return (
