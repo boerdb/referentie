@@ -1,5 +1,6 @@
 import { redisGet, redisSetEx } from "@/lib/redis";
 import type { ReferenceInput } from "@/lib/references/types";
+import { fetchAbstractByDoi, stripAbstractHtml } from "@/lib/doi/abstract";
 import {
   cleanDoiForLookup,
   doiLookupCandidates,
@@ -43,10 +44,6 @@ type CslWork = {
   published?: DateParts;
   author?: { given?: string; family?: string }[];
 };
-
-function stripAbstractHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
 
 function yearFromParts(parts?: number[][]): number | null {
   const y = parts?.[0]?.[0];
@@ -193,14 +190,28 @@ async function cachedSet(doi: string, value: ReferenceInput): Promise<void> {
   }
 }
 
+async function withAbstract(
+  doi: string,
+  metadata: ReferenceInput,
+): Promise<ReferenceInput> {
+  if (metadata.abstract) return metadata;
+  const abstract = await fetchAbstractByDoi(metadata.doi ?? doi);
+  return abstract ? { ...metadata, abstract } : metadata;
+}
+
 async function fetchMetadataByDoiOnce(doi: string): Promise<ReferenceInput> {
   const cached = await cachedGet(doi);
-  if (cached?.title) return cached;
+  if (cached?.title) {
+    if (cached.abstract) return cached;
+    const enriched = await withAbstract(doi, cached);
+    if (enriched.abstract) await cachedSet(doi, enriched);
+    return enriched;
+  }
 
   const errors: string[] = [];
   for (const fn of [fetchFromCrossref, fetchFromDoiOrg]) {
     try {
-      const mapped = await fn(doi);
+      const mapped = await withAbstract(doi, await fn(doi));
       await cachedSet(doi, mapped);
       return mapped;
     } catch (e) {
