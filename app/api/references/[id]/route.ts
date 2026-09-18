@@ -5,6 +5,7 @@ import {
   updateReference,
 } from "@/lib/references/queries";
 import type { ReferenceInput } from "@/lib/references/types";
+import { cleanDoiForLookup } from "@/lib/doi/crossref";
 import { deletePdfFilesForReference } from "@/lib/uploads/pdf";
 import { jsonError, jsonOk, requireSession } from "@/lib/api/http";
 
@@ -24,6 +25,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (session instanceof Response) return session;
   const { id } = await ctx.params;
   const body = (await req.json()) as Partial<ReferenceInput>;
+  if (body.doi !== undefined) {
+    const raw = body.doi?.trim() ?? "";
+    body.doi = raw ? cleanDoiForLookup(raw) : null;
+  }
   const item = await updateReference(session.userId, id, body);
   if (!item) return jsonError("Niet gevonden.", 404);
   return jsonOk({ item });

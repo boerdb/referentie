@@ -12,6 +12,7 @@ import {
   Star,
   Upload,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import type { ReferenceRecord, RefStatus } from "@/lib/references/types";
 import type { SessionPayload } from "@/lib/auth/session";
@@ -56,6 +57,9 @@ export function LibraryApp({ user }: Props) {
   const [pdfDropActive, setPdfDropActive] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
   const [refreshingMeta, setRefreshingMeta] = useState(false);
+  const [doiEdit, setDoiEdit] = useState("");
+  const [doiSaving, setDoiSaving] = useState(false);
+  const [deletingRef, setDeletingRef] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pdfDropDepth = useRef(0);
@@ -103,6 +107,10 @@ export function LibraryApp({ user }: Props) {
     if (selectedId) void loadNote(selectedId);
     else setNote("");
   }, [selectedId, loadNote]);
+
+  useEffect(() => {
+    setDoiEdit(selected?.doi ?? "");
+  }, [selected?.id, selected?.doi]);
 
   useEffect(() => {
     if (selected?.attachmentId) void loadHighlights(selected.attachmentId);
@@ -317,13 +325,67 @@ export function LibraryApp({ user }: Props) {
     }
   }
 
+  async function saveDoi() {
+    if (!selectedId) return;
+    setDoiSaving(true);
+    try {
+      const res = await fetch(`/api/references/${selectedId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doi: doiEdit.trim() || null }),
+      });
+      const data = (await res.json()) as { error?: string; item?: ReferenceRecord };
+      if (!res.ok) {
+        alert(data.error ?? "DOI opslaan mislukt");
+        return;
+      }
+      if (data.item) setDoiEdit(data.item.doi ?? "");
+      await load();
+    } catch {
+      alert("DOI opslaan mislukt — geen verbinding.");
+    } finally {
+      setDoiSaving(false);
+    }
+  }
+
+  async function deleteSelectedReference() {
+    if (!selectedId || !selected) return;
+    const ok = window.confirm(
+      `"${selected.title.slice(0, 80)}${selected.title.length > 80 ? "…" : ""}" verwijderen? PDF en notities gaan mee.`,
+    );
+    if (!ok) return;
+    setDeletingRef(true);
+    try {
+      const res = await fetch(`/api/references/${selectedId}`, { method: "DELETE" });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        alert(data.error ?? "Verwijderen mislukt");
+        return;
+      }
+      setSelectedId(null);
+      setMobilePane("list");
+      await load();
+    } catch {
+      alert("Verwijderen mislukt — geen verbinding.");
+    } finally {
+      setDeletingRef(false);
+    }
+  }
+
   async function refreshMetadataFromDoi() {
     if (!selectedId) return;
     setRefreshingMeta(true);
     try {
+      const payload = doiEdit.trim()
+        ? JSON.stringify({ doi: doiEdit.trim() })
+        : "{}";
       const res = await fetch(
         `/api/references/${selectedId}/refresh-metadata`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        },
       );
       const data = (await res.json()) as { error?: string; item?: ReferenceRecord };
       if (!res.ok) {
@@ -510,6 +572,15 @@ export function LibraryApp({ user }: Props) {
               <option value="reading">Bezig</option>
               <option value="read">Gelezen</option>
             </select>
+            <button
+              type="button"
+              title="Artikel verwijderen"
+              disabled={deletingRef}
+              onClick={() => void deleteSelectedReference()}
+              className="btn-ghost rounded-lg p-2 text-[var(--danger)] hover:bg-red-500/10"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-0 lg:grid-cols-2 lg:grid-rows-1">
@@ -527,38 +598,53 @@ export function LibraryApp({ user }: Props) {
                 ))}
               </div>
               <dl className="space-y-2 text-sm">
-                {selected.doi && (
-                  <div>
-                    <dt className="text-[var(--text-muted)]">DOI</dt>
-                    <dd className="flex flex-wrap items-center gap-2">
-                      <a
-                        className="text-[var(--accent)] underline break-all"
-                        href={`https://doi.org/${selected.doi.split("/").slice(0, 2).join("/")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {selected.doi}
-                      </a>
+                <div>
+                  <dt className="mb-1 text-[var(--text-muted)]">DOI</dt>
+                  <dd className="space-y-2">
+                    <input
+                      type="text"
+                      className="input w-full rounded-lg px-3 py-2 text-sm"
+                      placeholder="10.1038/…"
+                      value={doiEdit}
+                      onChange={(e) => setDoiEdit(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void saveDoi();
+                      }}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        className="btn-ghost inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-0.5 text-xs"
-                        disabled={refreshingMeta}
+                        className="btn-primary rounded-lg px-2 py-1 text-xs"
+                        disabled={doiSaving}
+                        onClick={() => void saveDoi()}
+                      >
+                        {doiSaving ? "Opslaan…" : "DOI opslaan"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-xs"
+                        disabled={refreshingMeta || !doiEdit.trim()}
                         onClick={() => void refreshMetadataFromDoi()}
-                        title="Titel, abstract en overige velden opnieuw via Crossref"
+                        title="Titel, abstract en overige velden via Crossref"
                       >
                         <RefreshCw
                           className={cn("h-3 w-3", refreshingMeta && "animate-spin")}
                         />
                         {refreshingMeta ? "Ophalen…" : "Metadata ophalen"}
                       </button>
-                    </dd>
-                  </div>
-                )}
-                {!selected.doi && (
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Geen DOI — plak een DOI via Ctrl+K of sleep opnieuw een PDF met DOI.
-                  </p>
-                )}
+                      {selected.doi && (
+                        <a
+                          className="text-xs text-[var(--accent)] underline"
+                          href={`https://doi.org/${selected.doi.split("/").slice(0, 2).join("/")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          doi.org ↗
+                        </a>
+                      )}
+                    </div>
+                  </dd>
+                </div>
                 {selected.journal && (
                   <div>
                     <dt className="text-[var(--text-muted)]">Tijdschrift</dt>
