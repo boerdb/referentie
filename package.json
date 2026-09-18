@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 -p 3020",
     "build": "next build",
-    "start": "next start -p 3020",
+    "start": "next start -p 3023",
     "lint": "eslint",
     "db:init": "node scripts/db-init.mjs",
     "test:redis": "node scripts/test-redis.mjs",
-    "deploy": "node scripts/deploy-prod.mjs",
+    "deploy": "python scripts/deploy_remote.py",
+    "deploy:setup": "python scripts/deploy_setup.py",
     "icons:generate": "node scripts/generate-icons.mjs",
     "postinstall": "node scripts/copy-pdf-worker.mjs && node scripts/generate-icons.mjs"
   },
@@ -34,9 +35,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
-    "tailwindcss": "^4",
     "sharp": "^0.34.5",
     "ssh2": "^1.17.0",
+    "tailwindcss": "^4",
     "typescript": "^5"
   }
 }

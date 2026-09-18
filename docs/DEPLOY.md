@@ -1,66 +1,42 @@
-# Referentie deployen
+# Referentie — productie op Next-server (192.168.1.32)
 
-Zelfde infrastructuur als **med-track-pwa** en **news-app**.
+**Repo:** `git@github.com:boerdb/referentie.git`  
+**Pad:** `/var/www/referentie`  
+**PM2:** `referentie` · poort **3023**
 
-## Architectuur
+Zelfde werkwijze als IC-support (`C:\DEV\IC-support\docs\DEPLOY.md`, `support-next` op poort 3014).
 
-| Onderdeel | Host | Details |
-|-----------|------|---------|
-| Next.js | NEXT `192.168.1.32` | `/var/www/referentie`, poort **3020** |
-| MariaDB | DB `192.168.1.14` | database `referentie` |
-| Redis | DB `192.168.1.14` | `redis://192.168.1.14:6379` |
+## Eerste keer (DB + env + deploy)
 
-```
-Browser/PWA → Cloudflare Tunnel (optioneel) → Next.js :3020 → MariaDB + Redis op .14
-```
-
-## 1. MariaDB (phpMyAdmin / root op .14)
-
-```bash
-# sql/schema.sql uitvoeren, daarna app-user:
-CREATE USER 'referentie'@'%' IDENTIFIED BY 'sterk-wachtwoord';
-GRANT SELECT, INSERT, UPDATE, DELETE ON referentie.* TO 'referentie'@'%';
-FLUSH PRIVILEGES;
+```powershell
+cd C:\DEV\referentie
+pip install paramiko   # eenmalig
+python scripts/deploy_setup.py
 ```
 
-Lokaal testen: `npm run db:init` (met `DATABASE_URL` in `.env.local`).
+Dit script:
 
-## 2. Omgevingsvariabelen op de server
+- voert `sql/schema.sql` uit op MariaDB **192.168.1.14**
+- maakt user `referentie` (default wachtwoord via `DB_PASS`, anders `kerkpoort`)
+- schrijft `/var/www/referentie/.env.local` op **.32**
+- clone + `scripts/deploy.sh` + PM2
 
-```bash
-cp /var/www/referentie/.env.example /var/www/referentie/.env.local
-nano /var/www/referentie/.env.local
+## Update (lokaal → server)
+
+```powershell
+cd C:\DEV\referentie
+npm run deploy
 ```
 
-Minimaal:
-
-```env
-DATABASE_URL=mysql://referentie:...@192.168.1.14:3306/referentie
-REDIS_URL=redis://192.168.1.14:6379
-AUTH_SECRET=<openssl rand -base64 32>
-REGISTRATION_OPEN=true
-UPLOAD_DIR=./data/pdfs
-NODE_ENV=production
-```
-
-## 3. GitHub + server (aanbevolen)
-
-Repo: `git@github.com:boerdb/referentie.git`, branch **main**.
-
-### Eerste keer op de server
+Of alleen op de server:
 
 ```bash
 ssh root@192.168.1.32
-mkdir -p /var/www && cd /var/www
-git clone git@github.com:boerdb/referentie.git referentie
-cd referentie
-cp .env.example .env.local && nano .env.local
-npm ci && npm run build
-pm2 start npm --name referentie -- start
-pm2 save
+cd /var/www/referentie
+bash scripts/deploy.sh
 ```
 
-### Updates (methode A — git pull op server)
+Handmatig:
 
 ```bash
 cd /var/www/referentie
@@ -70,27 +46,32 @@ npm run build
 pm2 restart referentie --update-env
 ```
 
-### Updates (methode B — vanaf Windows)
+## Omgevingsvariabelen
 
-```powershell
-cd C:\DEV\referentie
-$env:DEPLOY_PASS="..."   # SSH-wachtwoord NEXT-server
-npm run deploy
-```
-
-Het script doet `git pull`, `npm ci`, `build` en `pm2 restart referentie`. Bestaande `.env.local` blijft staan.
-
-## 4. Cloudflare Tunnel (optioneel)
-
-```yaml
-ingress:
-  - hostname: referentie.jouwdomein.nl
-    service: http://127.0.0.1:3020
-```
-
-## 5. Controle
+Op de server laadt PM2 `.env.local` via `ecosystem.config.cjs`.
 
 ```bash
-curl -s http://127.0.0.1:3020/api/health/redis
-pm2 logs referentie --lines 30
+cp .env.example .env.local
+nano .env.local
 ```
+
+Minimaal: `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET` (min. 32 tekens).
+
+## Cloudflare Tunnel (voorbeeld)
+
+```yaml
+  - hostname: referentie.jouwdomein.nl
+    service: http://127.0.0.1:3023
+```
+
+Test:
+
+```bash
+curl -I http://127.0.0.1:3023/
+curl -s http://127.0.0.1:3023/api/health/redis
+pm2 logs referentie
+```
+
+## Overrides (optioneel)
+
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PASSWORD`, `DB_HOST`, `DB_USER`, `DB_PASS`

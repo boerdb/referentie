@@ -11,7 +11,7 @@ const USER = process.env.DEPLOY_USER || "root";
 const PASS = process.env.DEPLOY_PASS;
 const APP_DIR = "/var/www/referentie";
 const REPO = "git@github.com:boerdb/referentie.git";
-const PORT = process.env.APP_PORT || "3020";
+const PORT = process.env.APP_PORT || "3023";
 const REDIS_URL = process.env.REDIS_URL || "redis://192.168.1.14:6379";
 
 if (!PASS) {
