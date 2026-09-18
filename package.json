@@ -3,24 +3,40 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 0.0.0.0 -p 3020",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "start": "next start -p 3020",
+    "lint": "eslint",
+    "db:init": "node scripts/db-init.mjs",
+    "test:redis": "node scripts/test-redis.mjs",
+    "deploy": "node scripts/deploy-prod.mjs",
+    "icons:generate": "node scripts/generate-icons.mjs",
+    "postinstall": "node scripts/copy-pdf-worker.mjs && node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.544.0",
+    "mysql2": "^3.14.1",
     "next": "16.3.5",
+    "next-themes": "^0.4.6",
+    "pdfjs-dist": "^4.10.38",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "redis": "^5.12.1",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
+    "sharp": "^0.34.5",
+    "ssh2": "^1.17.0",
     "typescript": "^5"
   }
 }

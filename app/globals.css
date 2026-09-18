@@ -1,26 +1,112 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-page: #f0f6fc;
+  --bg-panel: #ffffff;
+  --bg-elevated: #ffffff;
+  --border: #dbeafe;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --accent: #0284c7;
+  --accent-soft: #e0f2fe;
+  --accent-muted: #bae6fd;
+  --danger: #dc2626;
+  --shadow-soft: 0 1px 3px rgba(2, 132, 199, 0.06), 0 4px 14px rgba(15, 23, 42, 0.04);
+  --overlay: rgba(15, 23, 42, 0.25);
+  --pdf-bg: #f1f5f9;
+  --pdf-chrome: #475569;
+  --sidebar-w: 220px;
+  --list-w: 360px;
+}
+
+.dark {
+  --bg-page: #1e293b;
+  --bg-panel: #273549;
+  --bg-elevated: #334155;
+  --border: #475569;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --accent: #38bdf8;
+  --accent-soft: #0c4a6e;
+  --accent-muted: #075985;
+  --shadow-soft: 0 4px 14px rgba(0, 0, 0, 0.2);
+  --overlay: rgba(15, 23, 42, 0.55);
+  --pdf-bg: #0f172a;
+  --pdf-chrome: #cbd5e1;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg-page);
+  --color-foreground: var(--text);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(165deg, var(--bg-page) 0%, #ffffff 45%, var(--accent-soft) 120%);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+.dark body {
+  background: linear-gradient(165deg, var(--bg-page) 0%, #0f172a 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 4px;
+}
+
+.panel {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 0;
+  border-color: var(--accent-muted);
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, #0ea5e9 0%, var(--accent) 100%);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.25);
+}
+.btn-primary:hover {
+  filter: brightness(1.06);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+.btn-ghost:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.card-login {
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent-soft));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
 }
