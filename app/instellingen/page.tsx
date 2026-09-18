@@ -8,7 +8,7 @@ export default async function InstellingenPage() {
   if (!session) redirect("/login");
 
   return (
-    <div className="mx-auto max-w-lg p-6">
+    <div className="mx-auto max-w-lg p-6 max-lg:px-4 max-lg:pt-[max(1.5rem,env(safe-area-inset-top))] max-lg:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <Link href="/bibliotheek" className="text-sm text-[var(--accent)] underline">
         ← Bibliotheek
       </Link>

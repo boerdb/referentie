@@ -11,8 +11,33 @@ export function PdfViewer({ url, title }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [renderWidth, setRenderWidth] = useState(0);
 
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let timer = 0;
+    const update = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const w = Math.floor(el.clientWidth);
+        if (w < 80) return;
+        setRenderWidth((prev) => (Math.abs(prev - w) < 8 ? prev : w));
+      }, 80);
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      window.clearTimeout(timer);
+      ro.disconnect();
+    };
+  }, [url]);
+
+  useEffect(() => {
+    if (renderWidth < 80) return;
     let cancelled = false;
 
     async function renderPdf() {
@@ -31,7 +56,7 @@ export function PdfViewer({ url, title }: Props) {
           return;
         }
 
-        const width = Math.max(container.clientWidth, 280);
+        const width = renderWidth;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
         for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
@@ -68,15 +93,28 @@ export function PdfViewer({ url, title }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [url, title]);
+  }, [url, title, renderWidth]);
 
   return (
     <div
       className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]"
       style={{ background: "var(--pdf-bg)" }}
     >
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2 lg:hidden">
+        <p className="truncate text-xs" style={{ color: "var(--pdf-chrome)" }}>
+          {status === "loading" ? "PDF laden…" : title}
+        </p>
+        <a
+          href={url}
+          className="shrink-0 text-xs font-medium text-[var(--accent)] underline"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Openen
+        </a>
+      </div>
       {status === "loading" && (
-        <p className="p-4 text-center text-sm" style={{ color: "var(--pdf-chrome)" }}>
+        <p className="hidden p-4 text-center text-sm lg:block" style={{ color: "var(--pdf-chrome)" }}>
           PDF laden…
         </p>
       )}
@@ -88,7 +126,10 @@ export function PdfViewer({ url, title }: Props) {
           </a>
         </div>
       )}
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto p-2" />
+      <div
+        ref={containerRef}
+        className="min-h-0 flex-1 overflow-auto p-2 [-webkit-overflow-scrolling:touch]"
+      />
     </div>
   );
 }

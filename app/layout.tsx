@@ -20,7 +20,13 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Referentie",
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
   },
   icons: {
     icon: "/icons/icon-192.png",
@@ -31,7 +37,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0284c7",
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#1e293b" },
+    { color: "#0284c7" },
+  ],
 };
 
 export default function RootLayout({

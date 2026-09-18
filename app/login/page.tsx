@@ -44,8 +44,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center p-6">
-      <div className="card-login w-full max-w-md rounded-2xl p-8">
+    <div className="flex min-h-dvh items-center justify-center p-6 max-lg:px-4 max-lg:py-[max(1.5rem,env(safe-area-inset-top))]">
+      <div className="card-login w-full max-w-md rounded-2xl p-8 max-lg:p-6">
         <h1 className="text-2xl font-semibold tracking-tight">Referentie</h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           Wetenschappelijke artikelen — desktop & PWA

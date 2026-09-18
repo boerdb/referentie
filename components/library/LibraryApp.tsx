@@ -7,12 +7,14 @@ import {
   BookOpen,
   Command,
   LogOut,
+  Menu,
   Plus,
   Search,
   Star,
   Upload,
   RefreshCw,
   Trash2,
+  X,
 } from "lucide-react";
 import type { ReferenceRecord, RefStatus } from "@/lib/references/types";
 import type { SessionPayload } from "@/lib/auth/session";
@@ -54,6 +56,9 @@ export function LibraryApp({ user }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileDetailTab, setMobileDetailTab] = useState<"info" | "pdf">("info");
+  const [titleExpanded, setTitleExpanded] = useState(false);
   const [pdfDropActive, setPdfDropActive] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
   const [refreshingMeta, setRefreshingMeta] = useState(false);
@@ -111,6 +116,11 @@ export function LibraryApp({ user }: Props) {
   useEffect(() => {
     setDoiEdit(selected?.doi ?? "");
   }, [selected?.id, selected?.doi]);
+
+  useEffect(() => {
+    setTitleExpanded(false);
+    setMobileDetailTab(selected?.hasPdf ? "pdf" : "info");
+  }, [selected?.id, selected?.hasPdf]);
 
   useEffect(() => {
     if (selected?.attachmentId) void loadHighlights(selected.attachmentId);
@@ -429,11 +439,19 @@ export function LibraryApp({ user }: Props) {
   const sidebar = (
     <aside className="panel flex h-full w-full flex-col border-r lg:w-[var(--sidebar-w)] lg:shrink-0">
       <div className="flex items-center gap-2 border-b border-[var(--border)] p-4">
-        <BookOpen className="h-5 w-5 text-[var(--accent)]" />
-        <div>
+        <BookOpen className="h-5 w-5 shrink-0 text-[var(--accent)]" />
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Referentie</p>
-          <p className="text-xs text-[var(--text-muted)]">{user.email}</p>
+          <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>
         </div>
+        <button
+          type="button"
+          className="btn-ghost grid h-11 w-11 shrink-0 place-items-center rounded-lg lg:hidden"
+          aria-label="Menu sluiten"
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3 text-sm">
         <FilterBtn active={filterStatus === "all"} onClick={() => setFilterStatus("all")}>
@@ -456,10 +474,24 @@ export function LibraryApp({ user }: Props) {
         </FilterBtn>
       </nav>
       <div className="space-y-1 border-t border-[var(--border)] p-3 text-sm">
-        <Link href="/instellingen" className="btn-ghost block rounded-lg px-3 py-2">
+        <div className="mb-2 lg:hidden">
+          <p className="mb-1.5 px-1 text-xs text-[var(--text-muted)]">Thema</p>
+          <ThemeSelector variant="icons" />
+        </div>
+        <button
+          type="button"
+          className="btn-ghost flex w-full items-center gap-2 rounded-lg px-3 py-3 lg:hidden"
+          onClick={() => {
+            setMobileMenuOpen(false);
+            setPaletteOpen(true);
+          }}
+        >
+          <Command className="h-4 w-4" /> DOI / zoeken
+        </button>
+        <Link href="/instellingen" className="btn-ghost block rounded-lg px-3 py-2 max-lg:py-3">
           Instellingen
         </Link>
-        <button type="button" onClick={() => void logout()} className="btn-ghost flex w-full items-center gap-2 rounded-lg px-3 py-2">
+        <button type="button" onClick={() => void logout()} className="btn-ghost flex w-full items-center gap-2 rounded-lg px-3 py-2 max-lg:py-3">
           <LogOut className="h-4 w-4" /> Uitloggen
         </button>
       </div>
@@ -474,19 +506,27 @@ export function LibraryApp({ user }: Props) {
       )}
     >
       <div className="flex items-center gap-2 border-b border-[var(--border)] p-3">
+        <button
+          type="button"
+          className="btn-ghost grid h-11 w-11 shrink-0 place-items-center rounded-lg lg:hidden"
+          aria-label="Menu"
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <div className="relative flex-1">
-          <Search className="absolute top-2.5 left-2.5 h-4 w-4 text-[var(--text-muted)]" />
+          <Search className="absolute top-3 left-2.5 h-4 w-4 text-[var(--text-muted)] lg:top-2.5" />
           <input
             ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Zoeken… (/)"
-            className="input w-full rounded-lg py-2 pr-3 pl-9 text-sm"
+            className="input w-full rounded-lg py-2 pr-3 pl-9 text-sm max-lg:h-11 max-lg:py-2.5"
           />
         </div>
         <button
           type="button"
-          className="btn-primary rounded-lg p-2"
+          className="btn-primary grid h-11 w-11 place-items-center rounded-lg p-0 lg:h-auto lg:w-auto lg:p-2"
           title="Nieuw (n)"
           onClick={() => setFormOpen(true)}
         >
@@ -494,7 +534,7 @@ export function LibraryApp({ user }: Props) {
         </button>
         <button
           type="button"
-          className="btn-ghost rounded-lg p-2"
+          className="btn-ghost hidden place-items-center rounded-lg p-2 lg:grid"
           title="Command palette (Ctrl+K)"
           onClick={() => setPaletteOpen(true)}
         >
@@ -518,9 +558,10 @@ export function LibraryApp({ user }: Props) {
             onClick={() => {
               setSelectedId(item.id);
               setMobilePane("detail");
+              setMobileDetailTab(item.hasPdf ? "pdf" : "info");
             }}
             className={cn(
-              "block w-full border-b border-[var(--border)] px-4 py-3 text-left transition",
+              "block w-full border-b border-[var(--border)] px-4 py-3 text-left transition max-lg:py-3.5",
               selectedId === item.id
                 ? "bg-[var(--accent-soft)] ring-1 ring-[var(--accent-muted)]"
                 : "hover:bg-[var(--accent-soft)]/60",
@@ -550,10 +591,110 @@ export function LibraryApp({ user }: Props) {
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-start gap-2 border-b border-[var(--border)] p-4">
-            <button type="button" className="btn-ghost rounded-lg px-2 py-1 text-sm lg:hidden" onClick={() => setMobilePane("list")}>
-              ← Lijst
+          <div className="flex flex-col border-b border-[var(--border)] lg:hidden">
+            <div className="flex items-center gap-1 px-1 py-1">
+              <button
+                type="button"
+                className="btn-ghost inline-flex h-11 shrink-0 items-center rounded-lg px-2 text-sm"
+                onClick={() => setMobilePane("list")}
+              >
+                ← Lijst
+              </button>
+              <div className="ml-auto flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => void toggleStar()}
+                  className="btn-ghost grid h-11 w-11 place-items-center rounded-lg"
+                  aria-label={selected.starred ? "Favoriet uit" : "Favoriet"}
+                >
+                  <Star className={cn("h-4 w-4", selected.starred && "fill-amber-400 text-amber-500")} />
+                </button>
+                <select
+                  value={selected.status}
+                  onChange={(e) => void setStatus(e.target.value as RefStatus)}
+                  className="input h-11 max-w-[9.5rem] rounded-lg px-2 text-sm"
+                  aria-label="Status"
+                >
+                  <option value="unread">Ongelezen</option>
+                  <option value="reading">Bezig</option>
+                  <option value="read">Gelezen</option>
+                </select>
+                <button
+                  type="button"
+                  title="Artikel verwijderen"
+                  disabled={deletingRef}
+                  onClick={() => void deleteSelectedReference()}
+                  className="btn-ghost grid h-11 w-11 place-items-center rounded-lg text-[var(--danger)] hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="px-4 pb-2 text-left"
+              onClick={() => setTitleExpanded((v) => !v)}
+            >
+              <h1
+                className={cn(
+                  "font-semibold leading-snug",
+                  titleExpanded
+                    ? "text-[0.95rem]"
+                    : mobileDetailTab === "pdf"
+                      ? "line-clamp-1 text-sm"
+                      : "line-clamp-3 text-[0.95rem]",
+                )}
+              >
+                {selected.title}
+              </h1>
+              <p
+                className={cn(
+                  "mt-0.5 text-xs text-[var(--text-muted)]",
+                  !titleExpanded && (mobileDetailTab === "pdf" ? "hidden" : "line-clamp-1"),
+                )}
+              >
+                {selected.authors.map((a) => `${a.givenName} ${a.familyName}`.trim()).join(", ")}
+              </p>
             </button>
+            {selected.hasPdf && (
+              <div
+                className="mx-3 mb-2 grid grid-cols-2 gap-1 rounded-lg bg-[var(--accent-soft)] p-1"
+                role="tablist"
+                aria-label="Artikelweergave"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileDetailTab === "info"}
+                  className={cn(
+                    "rounded-md py-2 text-sm font-medium",
+                    mobileDetailTab === "info"
+                      ? "bg-[var(--bg-panel)] text-[var(--accent)] shadow-sm"
+                      : "text-[var(--text-muted)]",
+                  )}
+                  onClick={() => setMobileDetailTab("info")}
+                >
+                  Artikel
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileDetailTab === "pdf"}
+                  className={cn(
+                    "rounded-md py-2 text-sm font-medium",
+                    mobileDetailTab === "pdf"
+                      ? "bg-[var(--bg-panel)] text-[var(--accent)] shadow-sm"
+                      : "text-[var(--text-muted)]",
+                  )}
+                  onClick={() => setMobileDetailTab("pdf")}
+                >
+                  PDF
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="hidden flex-wrap items-start gap-2 border-b border-[var(--border)] p-4 lg:flex">
             <div className="min-w-0 flex-1">
               <h1 className="text-lg font-semibold leading-snug">{selected.title}</h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
@@ -583,14 +724,19 @@ export function LibraryApp({ user }: Props) {
             </button>
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-0 lg:grid-cols-2 lg:grid-rows-1">
-            <div className="min-h-0 overflow-y-auto border-b border-[var(--border)] p-4 lg:border-r lg:border-b-0">
+          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-2 lg:grid-rows-1">
+            <div
+              className={cn(
+                "min-h-0 overflow-y-auto border-b border-[var(--border)] p-4 lg:border-r lg:border-b-0",
+                selected.hasPdf && mobileDetailTab === "pdf" ? "hidden lg:block" : "block flex-1",
+              )}
+            >
               <div className="mb-3 flex flex-wrap gap-2 text-sm">
                 {(["apa", "mla", "chicago"] as const).map((s) => (
                   <button
                     key={s}
                     type="button"
-                    className="btn-ghost rounded-lg border border-[var(--border)] px-2 py-1 uppercase"
+                    className="btn-ghost rounded-lg border border-[var(--border)] px-2 py-1 uppercase max-lg:min-h-11 max-lg:px-3"
                     onClick={() => void copyCitation(selected.id, s)}
                   >
                     {s}
@@ -737,7 +883,16 @@ export function LibraryApp({ user }: Props) {
               </div>
             </div>
 
-            <div className="flex min-h-[280px] flex-col p-4 lg:min-h-0">
+            <div
+              className={cn(
+                "min-h-0 flex-col lg:flex lg:min-h-0 lg:p-4",
+                selected.hasPdf
+                  ? mobileDetailTab === "pdf"
+                    ? "flex flex-1 p-2"
+                    : "hidden lg:flex"
+                  : "hidden lg:flex",
+              )}
+            >
               {selected.hasPdf ? (
                 <PdfViewer
                   url={`/api/references/${selected.id}/pdf`}
@@ -757,11 +912,7 @@ export function LibraryApp({ user }: Props) {
   );
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <header className="panel flex items-center justify-between border-b px-4 py-2 lg:hidden">
-        <span className="font-semibold">Referentie</span>
-        <ThemeSelector variant="icons" />
-      </header>
+    <div className="app-shell flex h-dvh flex-col overflow-hidden">
       <div
         className="relative flex min-h-0 flex-1"
         onDragEnter={onPdfDragEnter}
@@ -769,7 +920,24 @@ export function LibraryApp({ user }: Props) {
         onDragOver={onPdfDragOver}
         onDrop={(e) => void onPdfDrop(e)}
       >
-        <div className="hidden lg:flex">{sidebar}</div>
+        {mobileMenuOpen && (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 lg:hidden"
+            style={{ background: "var(--overlay)" }}
+            aria-label="Menu sluiten"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+        <div
+          className={cn(
+            "z-50 hidden lg:flex",
+            mobileMenuOpen &&
+              "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:!flex max-lg:w-[min(18.5rem,86vw)] max-lg:pt-[env(safe-area-inset-top,0px)] max-lg:pb-[env(safe-area-inset-bottom,0px)]",
+          )}
+        >
+          {sidebar}
+        </div>
         {listPane}
         {inspector}
         {(pdfDropActive || pdfImporting) && (
@@ -788,7 +956,7 @@ export function LibraryApp({ user }: Props) {
 
       {paletteOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[15vh]"
+          className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[15vh] max-lg:pt-[max(0.75rem,env(safe-area-inset-top))]"
           style={{ background: "var(--overlay)" }}
         >
           <div className="panel w-full max-w-lg rounded-xl border shadow-xl">
@@ -819,10 +987,10 @@ export function LibraryApp({ user }: Props) {
 
       {formOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 max-lg:items-end max-lg:p-0"
           style={{ background: "var(--overlay)" }}
         >
-          <div className="panel w-full max-w-lg rounded-xl border p-4 shadow-xl">
+          <div className="panel w-full max-w-lg rounded-xl border p-4 shadow-xl max-lg:max-h-[min(92dvh,100%)] max-lg:overflow-y-auto max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:pb-[max(1rem,env(safe-area-inset-bottom))]">
             <h2 className="text-lg font-semibold">Nieuw artikel</h2>
             <div className="mt-3 space-y-2">
               {(["title", "authors", "year", "journal", "doi"] as const).map((key) => (
@@ -835,7 +1003,7 @@ export function LibraryApp({ user }: Props) {
                   }
                   value={form[key]}
                   onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                  className="input w-full rounded-lg px-3 py-2 text-sm"
+                  className="input w-full rounded-lg px-3 py-2 text-sm max-lg:min-h-11"
                 />
               ))}
               <textarea
@@ -847,10 +1015,10 @@ export function LibraryApp({ user }: Props) {
               />
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="btn-ghost rounded-lg px-3 py-2 text-sm" onClick={() => setFormOpen(false)}>
+              <button type="button" className="btn-ghost rounded-lg px-3 py-2 text-sm max-lg:min-h-11" onClick={() => setFormOpen(false)}>
                 Annuleren
               </button>
-              <button type="button" className="btn-primary rounded-lg px-3 py-2 text-sm" onClick={() => void createManual()}>
+              <button type="button" className="btn-primary rounded-lg px-3 py-2 text-sm max-lg:min-h-11" onClick={() => void createManual()}>
                 Opslaan
               </button>
             </div>
@@ -875,7 +1043,7 @@ function FilterBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-lg px-3 py-2 text-left transition",
+        "rounded-lg px-3 py-2 text-left transition max-lg:py-3",
         active ? "bg-[var(--accent-soft)] font-medium text-[var(--accent)]" : "btn-ghost",
       )}
     >
@@ -886,7 +1054,7 @@ function FilterBtn({
 
 function PaletteAction({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button type="button" className="btn-ghost w-full rounded-lg px-3 py-2 text-left" onClick={onClick}>
+    <button type="button" className="btn-ghost w-full rounded-lg px-3 py-2 text-left max-lg:min-h-11" onClick={onClick}>
       {label}
     </button>
   );

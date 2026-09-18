@@ -110,3 +110,40 @@ body {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-soft);
 }
+
+/* Telefoon / smalle PWA — desktop (lg+) ongewijzigd */
+@media (max-width: 1023px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  .app-shell {
+    background: var(--bg-panel);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+
+  input.input,
+  textarea.input,
+  select.input {
+    font-size: 1rem;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}

@@ -1,4 +1,4 @@
-const CACHE = "referentie-shell-v1";
+const CACHE = "referentie-shell-v2";
 const SHELL = ["/", "/bibliotheek", "/login", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

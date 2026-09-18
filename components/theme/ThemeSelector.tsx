@@ -59,7 +59,7 @@ export function ThemeSelector({ variant = "full" }: Props) {
             aria-pressed={active}
             className={cn(
               "flex items-center justify-center gap-1.5 rounded-md text-xs font-medium transition",
-              variant === "full" ? "flex-1 px-2 py-2" : "px-2.5 py-2",
+              variant === "full" ? "flex-1 px-2 py-2" : "px-2.5 py-2 max-lg:min-h-11 max-lg:min-w-11",
               active
                 ? "bg-[var(--accent-soft)] text-[var(--accent)] shadow-sm"
                 : "text-[var(--text-muted)] hover:bg-[var(--accent-soft)]/50 hover:text-[var(--text)]",
