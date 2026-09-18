@@ -65,8 +65,10 @@ export function LibraryApp({ user }: Props) {
   const [doiEdit, setDoiEdit] = useState("");
   const [doiSaving, setDoiSaving] = useState(false);
   const [deletingRef, setDeletingRef] = useState(false);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const pdfDropDepth = useRef(0);
 
   const selected = useMemo(
@@ -144,7 +146,11 @@ export function LibraryApp({ user }: Props) {
         return;
       }
       if (e.key === "n" && !e.metaKey && !e.ctrlKey) {
-        setFormOpen(true);
+        if (window.matchMedia("(max-width: 1023px)").matches) {
+          setAddSheetOpen(true);
+        } else {
+          setFormOpen(true);
+        }
         return;
       }
       if (!selected) return;
@@ -483,6 +489,16 @@ export function LibraryApp({ user }: Props) {
           className="btn-ghost flex w-full items-center gap-2 rounded-lg px-3 py-3 lg:hidden"
           onClick={() => {
             setMobileMenuOpen(false);
+            importFileRef.current?.click();
+          }}
+        >
+          <Upload className="h-4 w-4" /> PDF uploaden
+        </button>
+        <button
+          type="button"
+          className="btn-ghost flex w-full items-center gap-2 rounded-lg px-3 py-3 lg:hidden"
+          onClick={() => {
+            setMobileMenuOpen(false);
             setPaletteOpen(true);
           }}
         >
@@ -528,7 +544,13 @@ export function LibraryApp({ user }: Props) {
           type="button"
           className="btn-primary grid h-11 w-11 place-items-center rounded-lg p-0 lg:h-auto lg:w-auto lg:p-2"
           title="Nieuw (n)"
-          onClick={() => setFormOpen(true)}
+          onClick={() => {
+            if (window.matchMedia("(max-width: 1023px)").matches) {
+              setAddSheetOpen(true);
+            } else {
+              setFormOpen(true);
+            }
+          }}
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -546,10 +568,31 @@ export function LibraryApp({ user }: Props) {
           <p className="p-4 text-sm text-[var(--text-muted)]">Laden…</p>
         )}
         {!loading && items.length === 0 && (
-          <p className="p-6 text-sm text-[var(--text-muted)]">
-            Nog geen artikelen. Sleep een PDF hierheen, plak een DOI (Ctrl+K) of voeg
-            handmatig toe.
-          </p>
+          <>
+            <p className="hidden p-6 text-sm text-[var(--text-muted)] lg:block">
+              Nog geen artikelen. Sleep een PDF hierheen, plak een DOI (Ctrl+K) of voeg
+              handmatig toe.
+            </p>
+            <div className="space-y-3 p-6 lg:hidden">
+              <p className="text-sm text-[var(--text-muted)]">
+                Nog geen artikelen. Upload een PDF of voeg er een handmatig toe.
+              </p>
+              <button
+                type="button"
+                className="btn-primary flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium"
+                onClick={() => importFileRef.current?.click()}
+              >
+                <Upload className="h-4 w-4" /> PDF uploaden
+              </button>
+              <button
+                type="button"
+                className="btn-ghost flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm"
+                onClick={() => setFormOpen(true)}
+              >
+                <Plus className="h-4 w-4" /> Handmatig artikel
+              </button>
+            </div>
+          </>
         )}
         {items.map((item) => (
           <button
@@ -913,6 +956,23 @@ export function LibraryApp({ user }: Props) {
 
   return (
     <div className="app-shell flex h-dvh flex-col overflow-hidden">
+      <input
+        ref={importFileRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = "";
+          if (files.length === 0) return;
+          void (async () => {
+            for (const file of files) {
+              await importPdfAsReference(file);
+            }
+          })();
+        }}
+      />
       <div
         className="relative flex min-h-0 flex-1"
         onDragEnter={onPdfDragEnter}
@@ -980,6 +1040,71 @@ export function LibraryApp({ user }: Props) {
                 <PaletteAction label="APA-citaat kopiëren" onClick={() => void copyCitation(selected.id, "apa")} />
               )}
               <PaletteAction label="Sluiten" onClick={() => setPaletteOpen(false)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addSheetOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center lg:hidden"
+          style={{ background: "var(--overlay)" }}
+        >
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="Sluiten"
+            onClick={() => setAddSheetOpen(false)}
+          />
+          <div className="panel relative w-full rounded-t-2xl border-x-0 border-b-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl">
+            <h2 className="text-lg font-semibold">Nieuw</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Op de telefoon kun je een PDF kiezen in plaats van slepen.
+            </p>
+            <div className="mt-3 space-y-2">
+              <button
+                type="button"
+                className="btn-primary flex min-h-12 w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium"
+                onClick={() => {
+                  importFileRef.current?.click();
+                  setAddSheetOpen(false);
+                }}
+              >
+                <Upload className="h-5 w-5 shrink-0" />
+                <span>
+                  PDF uploaden
+                  <span className="mt-0.5 block text-xs font-normal opacity-90">
+                    Nieuw artikel, metadata via DOI als die in de PDF staat
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="btn-ghost flex min-h-12 w-full items-center gap-3 rounded-lg border border-[var(--border)] px-3 py-3 text-left text-sm"
+                onClick={() => {
+                  setAddSheetOpen(false);
+                  setFormOpen(true);
+                }}
+              >
+                <Plus className="h-5 w-5 shrink-0" /> Handmatig artikel
+              </button>
+              <button
+                type="button"
+                className="btn-ghost flex min-h-12 w-full items-center gap-3 rounded-lg border border-[var(--border)] px-3 py-3 text-left text-sm"
+                onClick={() => {
+                  setAddSheetOpen(false);
+                  setPaletteOpen(true);
+                }}
+              >
+                <Command className="h-5 w-5 shrink-0" /> DOI plakken
+              </button>
+              <button
+                type="button"
+                className="btn-ghost min-h-11 w-full rounded-lg px-3 py-2 text-sm"
+                onClick={() => setAddSheetOpen(false)}
+              >
+                Annuleren
+              </button>
             </div>
           </div>
         </div>
