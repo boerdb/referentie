@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Share2 } from "lucide-react";
+import { pdfFileNameFromTitle, shareOrDownloadPdf } from "@/lib/share/files";
 
 type Props = {
   url: string;
@@ -12,6 +14,7 @@ export function PdfViewer({ url, title }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     const measure = measureRef.current;
@@ -116,6 +119,21 @@ export function PdfViewer({ url, title }: Props) {
     };
   }, [url, title]);
 
+  async function sharePdf() {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await shareOrDownloadPdf(url, {
+        fileName: pdfFileNameFromTitle(title),
+        title,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Delen mislukt.");
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]"
@@ -125,21 +143,27 @@ export function PdfViewer({ url, title }: Props) {
         <p className="truncate text-xs" style={{ color: "var(--pdf-chrome)" }}>
           {status === "loading" ? "PDF laden…" : title}
         </p>
-        <a
-          href={url}
-          className="shrink-0 text-xs font-medium text-[var(--accent)] underline"
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          disabled={sharing}
+          onClick={() => void sharePdf()}
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--accent)]"
         >
-          Openen
-        </a>
+          <Share2 className="h-3.5 w-3.5" />
+          {sharing ? "Bezig…" : "Delen"}
+        </button>
       </div>
       {status === "error" && (
         <div className="space-y-2 p-4 text-center text-sm text-[var(--danger)]">
           <p>{error}</p>
-          <a href={url} className="underline" target="_blank" rel="noreferrer">
-            Open PDF
-          </a>
+          <button
+            type="button"
+            disabled={sharing}
+            onClick={() => void sharePdf()}
+            className="underline"
+          >
+            PDF delen / downloaden
+          </button>
         </div>
       )}
       <div ref={measureRef} className="relative min-h-0 flex-1 overflow-hidden">

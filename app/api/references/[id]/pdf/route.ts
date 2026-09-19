@@ -13,10 +13,13 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const pdf = await getPdfForUser(session.userId, id);
   if (!pdf) return jsonError("Geen PDF voor dit artikel.", 404);
 
+  const asDownload = req.nextUrl.searchParams.get("download") === "1";
+  const safeName = pdf.fileName.replace(/"/g, "");
+
   return new Response(new Uint8Array(pdf.buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${encodeURIComponent(pdf.fileName)}"`,
+      "Content-Disposition": `${asDownload ? "attachment" : "inline"}; filename="${encodeURIComponent(safeName)}"`,
       "Cache-Control": "private, max-age=3600",
     },
   });

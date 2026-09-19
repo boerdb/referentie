@@ -10,6 +10,7 @@ import {
   Menu,
   Plus,
   Search,
+  Share2,
   Star,
   Upload,
   RefreshCw,
@@ -18,6 +19,12 @@ import {
 } from "lucide-react";
 import type { ReferenceRecord, RefStatus } from "@/lib/references/types";
 import type { SessionPayload } from "@/lib/auth/session";
+import { formatBibtex, formatShareSummary } from "@/lib/cite/formats";
+import {
+  pdfFileNameFromTitle,
+  shareOrCopyText,
+  shareOrDownloadPdf,
+} from "@/lib/share/files";
 import { PdfViewer } from "./PdfViewer";
 import { cn } from "@/lib/utils";
 import { cleanDoiForLookup } from "@/lib/doi/normalize";
@@ -66,6 +73,7 @@ export function LibraryApp({ user }: Props) {
   const [doiEdit, setDoiEdit] = useState("");
   const [doiSaving, setDoiSaving] = useState(false);
   const [deletingRef, setDeletingRef] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -174,6 +182,33 @@ export function LibraryApp({ user }: Props) {
     const res = await fetch(`/api/cite/${id}?style=${style}`);
     const data = (await res.json()) as { citation?: string };
     if (data.citation) await navigator.clipboard.writeText(data.citation);
+  }
+
+  async function exportSelected(mode: "pdf" | "summary" | "bibtex" = "pdf") {
+    if (!selected || exporting) return;
+    setExporting(true);
+    try {
+      if (mode === "bibtex") {
+        const bib = formatBibtex(selected);
+        const result = await shareOrCopyText(bib, { title: selected.title });
+        if (result === "copied") alert("BibTeX gekopieerd.");
+        return;
+      }
+      if (mode === "summary" || !selected.hasPdf) {
+        const text = formatShareSummary(selected);
+        const result = await shareOrCopyText(text, { title: selected.title });
+        if (result === "copied") alert("Artikelinfo gekopieerd.");
+        return;
+      }
+      await shareOrDownloadPdf(`/api/references/${selected.id}/pdf`, {
+        fileName: pdfFileNameFromTitle(selected.title),
+        title: selected.title,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Exporteren mislukt.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function addHighlight() {
@@ -665,6 +700,16 @@ export function LibraryApp({ user }: Props) {
                 >
                   <Star className={cn("h-4 w-4", selected.starred && "fill-amber-400 text-amber-500")} />
                 </button>
+                <button
+                  type="button"
+                  title={selected.hasPdf ? "PDF exporteren / delen" : "Artikel exporteren / delen"}
+                  disabled={exporting}
+                  onClick={() => void exportSelected(selected.hasPdf ? "pdf" : "summary")}
+                  className="btn-ghost grid h-11 w-11 place-items-center rounded-lg"
+                  aria-label="Exporteren"
+                >
+                  <Share2 className="h-4 w-4" />
+                </button>
                 <select
                   value={selected.status}
                   onChange={(e) => void setStatus(e.target.value as RefStatus)}
@@ -760,6 +805,15 @@ export function LibraryApp({ user }: Props) {
             <button type="button" onClick={() => void toggleStar()} className="btn-ghost rounded-lg p-2">
               <Star className={cn("h-4 w-4", selected.starred && "fill-amber-400 text-amber-500")} />
             </button>
+            <button
+              type="button"
+              title={selected.hasPdf ? "PDF exporteren / delen" : "Artikel exporteren / delen"}
+              disabled={exporting}
+              onClick={() => void exportSelected(selected.hasPdf ? "pdf" : "summary")}
+              className="btn-ghost rounded-lg p-2"
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
             <select
               value={selected.status}
               onChange={(e) => void setStatus(e.target.value as RefStatus)}
@@ -798,6 +852,29 @@ export function LibraryApp({ user }: Props) {
                     {s}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  disabled={exporting}
+                  className="btn-ghost inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-2 py-1 max-lg:min-h-11 max-lg:px-3"
+                  onClick={() => void exportSelected(selected.hasPdf ? "pdf" : "summary")}
+                  title={
+                    selected.hasPdf
+                      ? "PDF delen (WhatsApp, Bestanden, …)"
+                      : "Artikelinfo delen"
+                  }
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                  {exporting ? "Bezig…" : selected.hasPdf ? "PDF delen" : "Delen"}
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting}
+                  className="btn-ghost rounded-lg border border-[var(--border)] px-2 py-1 max-lg:min-h-11 max-lg:px-3"
+                  onClick={() => void exportSelected("bibtex")}
+                  title="BibTeX delen of kopiëren"
+                >
+                  BibTeX
+                </button>
               </div>
               <dl className="space-y-2 text-sm">
                 <div>
@@ -1053,7 +1130,23 @@ export function LibraryApp({ user }: Props) {
               <PaletteAction label="DOI importeren en opslaan" onClick={() => void importDoi(paletteQuery.trim(), true)} />
               <PaletteAction label="Nieuw artikel" onClick={() => { setFormOpen(true); setPaletteOpen(false); }} />
               {selected && (
-                <PaletteAction label="APA-citaat kopiëren" onClick={() => void copyCitation(selected.id, "apa")} />
+                <>
+                  <PaletteAction label="APA-citaat kopiëren" onClick={() => void copyCitation(selected.id, "apa")} />
+                  <PaletteAction
+                    label={selected.hasPdf ? "PDF exporteren / delen" : "Artikelinfo delen"}
+                    onClick={() => {
+                      setPaletteOpen(false);
+                      void exportSelected(selected.hasPdf ? "pdf" : "summary");
+                    }}
+                  />
+                  <PaletteAction
+                    label="BibTeX exporteren"
+                    onClick={() => {
+                      setPaletteOpen(false);
+                      void exportSelected("bibtex");
+                    }}
+                  />
+                </>
               )}
               <PaletteAction label="Sluiten" onClick={() => setPaletteOpen(false)} />
             </div>
