@@ -74,6 +74,7 @@ export function LibraryApp({ user }: Props) {
   const [doiSaving, setDoiSaving] = useState(false);
   const [deletingRef, setDeletingRef] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [citeCopied, setCiteCopied] = useState<string | null>(null);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -179,9 +180,47 @@ export function LibraryApp({ user }: Props) {
   }, [items, selected, paletteOpen]);
 
   async function copyCitation(id: string, style: string) {
-    const res = await fetch(`/api/cite/${id}?style=${style}`);
-    const data = (await res.json()) as { citation?: string };
-    if (data.citation) await navigator.clipboard.writeText(data.citation);
+    try {
+      const res = await fetch(`/api/cite/${id}?style=${style}`);
+      const data = (await res.json()) as { citation?: string; error?: string };
+      if (!res.ok || !data.citation) {
+        alert(data.error ?? "Citaat ophalen mislukt.");
+        return;
+      }
+
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(data.citation);
+        copied = true;
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = data.citation;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        copied = document.execCommand("copy");
+        ta.remove();
+      }
+
+      if (!copied) {
+        // Laatste redmiddel op iOS: share-sheet met het citaat
+        const result = await shareOrCopyText(data.citation, {
+          title: `${style.toUpperCase()}-citaat`,
+        });
+        setCiteCopied(
+          result === "shared"
+            ? `${style.toUpperCase()} gedeeld`
+            : `${style.toUpperCase()} gekopieerd`,
+        );
+      } else {
+        setCiteCopied(`${style.toUpperCase()} gekopieerd — plak waar je wilt`);
+      }
+      window.setTimeout(() => setCiteCopied(null), 3500);
+    } catch {
+      alert("Citaat kopiëren mislukt.");
+    }
   }
 
   async function exportSelected(mode: "pdf" | "summary" | "bibtex" = "pdf") {
@@ -841,40 +880,56 @@ export function LibraryApp({ user }: Props) {
                 selected.hasPdf && mobileDetailTab === "pdf" ? "hidden lg:block" : "block flex-1",
               )}
             >
-              <div className="mb-3 flex flex-wrap gap-2 text-sm">
-                {(["apa", "mla", "chicago"] as const).map((s) => (
+              <div className="mb-3 space-y-1.5">
+                <p className="text-xs text-[var(--text-muted)]">
+                  Citaat kopiëren naar klembord
+                </p>
+                <div className="flex flex-wrap gap-2 text-sm">
+                  {(["apa", "mla", "chicago"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      title={`${s.toUpperCase()}-citaat kopiëren`}
+                      className={cn(
+                        "btn-ghost rounded-lg border px-2 py-1 uppercase max-lg:min-h-11 max-lg:px-3",
+                        citeCopied?.toUpperCase().startsWith(s.toUpperCase())
+                          ? "border-[var(--accent)] text-[var(--accent)]"
+                          : "border-[var(--border)]",
+                      )}
+                      onClick={() => void copyCitation(selected.id, s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
                   <button
-                    key={s}
                     type="button"
-                    className="btn-ghost rounded-lg border border-[var(--border)] px-2 py-1 uppercase max-lg:min-h-11 max-lg:px-3"
-                    onClick={() => void copyCitation(selected.id, s)}
+                    disabled={exporting}
+                    className="btn-ghost inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-2 py-1 max-lg:min-h-11 max-lg:px-3"
+                    onClick={() => void exportSelected(selected.hasPdf ? "pdf" : "summary")}
+                    title={
+                      selected.hasPdf
+                        ? "PDF delen (WhatsApp, Bestanden, …)"
+                        : "Artikelinfo delen"
+                    }
                   >
-                    {s}
+                    <Share2 className="h-3.5 w-3.5" />
+                    {exporting ? "Bezig…" : selected.hasPdf ? "PDF delen" : "Delen"}
                   </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={exporting}
-                  className="btn-ghost inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-2 py-1 max-lg:min-h-11 max-lg:px-3"
-                  onClick={() => void exportSelected(selected.hasPdf ? "pdf" : "summary")}
-                  title={
-                    selected.hasPdf
-                      ? "PDF delen (WhatsApp, Bestanden, …)"
-                      : "Artikelinfo delen"
-                  }
-                >
-                  <Share2 className="h-3.5 w-3.5" />
-                  {exporting ? "Bezig…" : selected.hasPdf ? "PDF delen" : "Delen"}
-                </button>
-                <button
-                  type="button"
-                  disabled={exporting}
-                  className="btn-ghost rounded-lg border border-[var(--border)] px-2 py-1 max-lg:min-h-11 max-lg:px-3"
-                  onClick={() => void exportSelected("bibtex")}
-                  title="BibTeX delen of kopiëren"
-                >
-                  BibTeX
-                </button>
+                  <button
+                    type="button"
+                    disabled={exporting}
+                    className="btn-ghost rounded-lg border border-[var(--border)] px-2 py-1 max-lg:min-h-11 max-lg:px-3"
+                    onClick={() => void exportSelected("bibtex")}
+                    title="BibTeX delen of kopiëren"
+                  >
+                    BibTeX
+                  </button>
+                </div>
+                {citeCopied && (
+                  <p className="text-xs font-medium text-[var(--accent)]" role="status">
+                    {citeCopied}
+                  </p>
+                )}
               </div>
               <dl className="space-y-2 text-sm">
                 <div>
