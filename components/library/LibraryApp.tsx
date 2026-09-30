@@ -131,8 +131,8 @@ export function LibraryApp({ user }: Props) {
 
   useEffect(() => {
     setTitleExpanded(false);
-    setMobileDetailTab(selected?.hasPdf ? "pdf" : "info");
-  }, [selected?.id, selected?.hasPdf]);
+    setMobileDetailTab("info");
+  }, [selected?.id]);
 
   useEffect(() => {
     if (selected?.attachmentId) void loadHighlights(selected.attachmentId);
@@ -688,7 +688,7 @@ export function LibraryApp({ user }: Props) {
             onClick={() => {
               setSelectedId(item.id);
               setMobilePane("detail");
-              setMobileDetailTab(item.hasPdf ? "pdf" : "info");
+              setMobileDetailTab("info");
             }}
             className={cn(
               "block w-full border-b border-[var(--border)] px-4 py-3 text-left transition max-lg:py-3.5",
