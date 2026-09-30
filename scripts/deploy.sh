@@ -5,6 +5,24 @@ APP_DIR="/var/www/referentie"
 REPO="git@github.com:boerdb/referentie.git"
 BRANCH="main"
 
+# Dagelijks na de Windows-sync (14:00). Ongewijzigde studies doen niets.
+install_studies_import_cron() {
+  local node_bin marker line tmp
+  node_bin="$(command -v node || true)"
+  if [[ -z "$node_bin" ]]; then
+    echo "Geen node in PATH; cron voor studies-import niet geïnstalleerd."
+    return 0
+  fi
+  marker="referentie-studies-import"
+  line="5 15 * * * flock -n ${APP_DIR}/data/studies-import.lock ${node_bin} ${APP_DIR}/scripts/import-studies.mjs >> ${APP_DIR}/data/studies-import.log 2>&1 # ${marker}"
+  tmp="$(mktemp)"
+  crontab -l 2>/dev/null | grep -v "$marker" > "$tmp" || true
+  echo "$line" >> "$tmp"
+  crontab "$tmp"
+  rm -f "$tmp"
+  echo "Cron studies-import: dagelijks 15:05"
+}
+
 echo "==> PM2 apps (huidige poorten):"
 pm2 jlist 2>/dev/null | grep -oE '"PORT":"[0-9]+"' || pm2 list
 echo ""
@@ -28,6 +46,7 @@ if [[ ! -f "$APP_DIR/.env.local" ]]; then
 fi
 
 mkdir -p "$APP_DIR/data/pdfs"
+install_studies_import_cron
 npm ci
 npm run build
 

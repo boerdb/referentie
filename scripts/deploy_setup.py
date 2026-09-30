@@ -59,6 +59,8 @@ def env_to_text(env: dict[str, str]) -> str:
         "AUTH_SECRET",
         "REGISTRATION_OPEN",
         "UPLOAD_DIR",
+        "IMPORT_USER_EMAIL",
+        "STUDIES_DIR",
     ]
     lines: list[str] = []
     seen: set[str] = set()
@@ -103,6 +105,8 @@ def merge_env_local(ssh: paramiko.SSHClient) -> None:
     env.setdefault("REGISTRATION_OPEN", "true")
     env.setdefault("COOKIE_SECURE", "false")
     env.setdefault("UPLOAD_DIR", "./data/pdfs")
+    env.setdefault("IMPORT_USER_EMAIL", "")
+    env.setdefault("STUDIES_DIR", "/var/www/icu-studies")
     if not env.get("AUTH_SECRET"):
         env["AUTH_SECRET"] = secrets.token_urlsafe(48)
         print("Generated new AUTH_SECRET")
