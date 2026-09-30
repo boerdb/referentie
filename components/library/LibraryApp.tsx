@@ -711,7 +711,7 @@ export function LibraryApp({ user }: Props) {
   const inspector = (
     <section
       className={cn(
-        "flex min-h-0 flex-1 flex-col",
+        "flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-hidden",
         mobilePane === "list" ? "hidden lg:flex" : "flex w-full",
       )}
     >
@@ -721,8 +721,8 @@ export function LibraryApp({ user }: Props) {
         </div>
       ) : (
         <>
-          <div className="flex flex-col border-b border-[var(--border)] lg:hidden">
-            <div className="flex items-center gap-1 px-1 py-1">
+          <div className="flex min-w-0 flex-col overflow-hidden border-b border-[var(--border)] lg:hidden">
+            <div className="flex min-w-0 items-center gap-1 px-1 py-1">
               <button
                 type="button"
                 className="btn-ghost inline-flex h-11 shrink-0 items-center rounded-lg px-2 text-sm"
@@ -730,7 +730,7 @@ export function LibraryApp({ user }: Props) {
               >
                 ← Lijst
               </button>
-              <div className="ml-auto flex items-center gap-0.5">
+              <div className="ml-auto flex min-w-0 items-center gap-0.5">
                 <button
                   type="button"
                   onClick={() => void toggleStar()}
@@ -752,7 +752,7 @@ export function LibraryApp({ user }: Props) {
                 <select
                   value={selected.status}
                   onChange={(e) => void setStatus(e.target.value as RefStatus)}
-                  className="input h-11 max-w-[9.5rem] rounded-lg px-2 text-sm"
+                  className="input h-11 w-[6.75rem] min-w-0 max-w-[7.5rem] shrink rounded-lg px-1 text-sm"
                   aria-label="Status"
                 >
                   <option value="unread">Ongelezen</option>
@@ -772,12 +772,12 @@ export function LibraryApp({ user }: Props) {
             </div>
             <button
               type="button"
-              className="px-4 pb-2 text-left"
+              className="min-w-0 px-4 pb-2 text-left"
               onClick={() => setTitleExpanded((v) => !v)}
             >
               <h1
                 className={cn(
-                  "font-semibold leading-snug",
+                  "break-words font-semibold leading-snug",
                   titleExpanded
                     ? "text-[0.95rem]"
                     : mobileDetailTab === "pdf"
@@ -789,7 +789,7 @@ export function LibraryApp({ user }: Props) {
               </h1>
               <p
                 className={cn(
-                  "mt-0.5 text-xs text-[var(--text-muted)]",
+                  "mt-0.5 break-words text-xs text-[var(--text-muted)]",
                   !titleExpanded && (mobileDetailTab === "pdf" ? "hidden" : "line-clamp-1"),
                 )}
               >
@@ -873,10 +873,10 @@ export function LibraryApp({ user }: Props) {
             </button>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-2 lg:grid-rows-1">
+          <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-2 lg:grid-rows-1">
             <div
               className={cn(
-                "min-h-0 overflow-y-auto border-b border-[var(--border)] p-4 lg:border-r lg:border-b-0",
+                "min-h-0 min-w-0 w-full max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain border-b border-[var(--border)] p-4 [overflow-wrap:anywhere] lg:border-r lg:border-b-0",
                 selected.hasPdf && mobileDetailTab === "pdf" ? "hidden lg:block" : "block flex-1",
               )}
             >
@@ -937,7 +937,7 @@ export function LibraryApp({ user }: Props) {
                   <dd className="space-y-2">
                     <input
                       type="text"
-                      className="input w-full rounded-lg px-3 py-2 text-sm"
+                      className="input w-full min-w-0 max-w-full rounded-lg px-3 py-2 text-sm"
                       placeholder="10.1038/…"
                       value={doiEdit}
                       onChange={(e) => setDoiEdit(e.target.value)}
@@ -968,7 +968,7 @@ export function LibraryApp({ user }: Props) {
                       </button>
                       {selected.doi && (
                         <a
-                          className="text-xs text-[var(--accent)] underline"
+                          className="break-all text-xs text-[var(--accent)] underline"
                           href={`https://doi.org/${cleanDoiForLookup(selected.doi)}`}
                           target="_blank"
                           rel="noreferrer"
@@ -987,7 +987,7 @@ export function LibraryApp({ user }: Props) {
                 )}
                 <div>
                   <dt className="text-[var(--text-muted)]">Abstract</dt>
-                  <dd className="leading-relaxed">
+                  <dd className="leading-relaxed [overflow-wrap:anywhere]">
                     {selected.abstract || (
                       <span className="text-[var(--text-muted)]">
                         Nog leeg — gebruik &quot;Metadata ophalen&quot; bij een geldige DOI.
@@ -1003,7 +1003,7 @@ export function LibraryApp({ user }: Props) {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={6}
-                  className="input mt-1 w-full rounded-lg p-2 text-sm"
+                  className="input mt-1 w-full min-w-0 max-w-full rounded-lg p-2 text-sm"
                   placeholder="Markdown-notities…"
                 />
                 <button
@@ -1019,15 +1019,15 @@ export function LibraryApp({ user }: Props) {
               {selected.hasPdf && (
                 <div className="mt-4">
                   <p className="text-sm font-medium">Highlights</p>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex min-w-0 gap-2">
                     <input
-                      className="input w-16 rounded-lg px-2 py-1 text-sm"
+                      className="input w-16 shrink-0 rounded-lg px-2 py-1 text-sm"
                       value={hlPage}
                       onChange={(e) => setHlPage(e.target.value)}
                       placeholder="Pag."
                     />
                     <input
-                      className="input flex-1 rounded-lg px-2 py-1 text-sm"
+                      className="input min-w-0 flex-1 rounded-lg px-2 py-1 text-sm"
                       value={hlQuote}
                       onChange={(e) => setHlQuote(e.target.value)}
                       placeholder="Geciteerde tekst…"
@@ -1042,7 +1042,7 @@ export function LibraryApp({ user }: Props) {
                   </div>
                   <ul className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
                     {highlights.map((h) => (
-                      <li key={h.id}>
+                      <li key={h.id} className="break-words">
                         p.{h.page}: {h.quote}
                       </li>
                     ))}
@@ -1073,7 +1073,7 @@ export function LibraryApp({ user }: Props) {
 
             <div
               className={cn(
-                "min-h-0 flex-col lg:flex lg:min-h-0 lg:p-4",
+                "min-h-0 min-w-0 flex-col lg:flex lg:min-h-0 lg:p-4",
                 selected.hasPdf
                   ? mobileDetailTab === "pdf"
                     ? "flex flex-1 p-2"
@@ -1122,7 +1122,7 @@ export function LibraryApp({ user }: Props) {
         }}
       />
       <div
-        className="relative flex min-h-0 flex-1"
+        className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
         onDragEnter={onPdfDragEnter}
         onDragLeave={onPdfDragLeave}
         onDragOver={onPdfDragOver}
