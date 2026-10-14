@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { getSessionFromCookies } from "@/lib/auth/session";
 import { ThemeSelector } from "@/components/theme/ThemeSelector";
 
@@ -8,26 +9,38 @@ export default async function InstellingenPage() {
   if (!session) redirect("/login");
 
   return (
-    <div className="mx-auto max-w-lg p-6 max-lg:px-4 max-lg:pt-[max(1.5rem,env(safe-area-inset-top))] max-lg:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-      <Link href="/bibliotheek" className="text-sm text-[var(--accent)] underline">
-        ← Bibliotheek
+    <div className="mx-auto max-w-2xl px-6 py-10 max-lg:px-4 max-lg:pt-[max(1.5rem,env(safe-area-inset-top))] max-lg:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <Link
+        href="/bibliotheek"
+        className="inline-flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
+      >
+        <ArrowLeft className="h-4 w-4" /> Terug naar bibliotheek
       </Link>
-      <h1 className="mt-4 text-2xl font-semibold">Instellingen</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">{session.email}</p>
+      <h1 className="mt-6 text-2xl font-semibold tracking-tight">Instellingen</h1>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">
+        Ingelogd als <span className="font-medium text-[var(--text)]">{session.email}</span>
+      </p>
 
-      <div className="panel mt-6 space-y-4 rounded-xl border p-4">
-        <div className="space-y-2">
-          <span className="text-sm font-medium">Thema</span>
-          <p className="text-xs text-[var(--text-muted)]">
-            Standaard volgt de app je systeem (Windows/macOS). Kies Licht of Donker om dat vast
-            te zetten.
+      <div className="card mt-8 divide-y divide-[var(--border)]">
+        <section className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div>
+            <h2 className="text-sm font-semibold">Weergave</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Standaard volgt de app je systeeminstelling. Kies Licht of Donker om dat vast te
+              zetten.
+            </p>
+          </div>
+          <div className="sm:w-72">
+            <ThemeSelector variant="full" />
+          </div>
+        </section>
+        <section className="p-5">
+          <h2 className="text-sm font-semibold">Installeren als app</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Installeer Referentie via het browsermenu (Installeren / Toevoegen aan startscherm)
+            voor een losse app op desktop of telefoon.
           </p>
-          <ThemeSelector variant="full" />
-        </div>
-        <p className="text-sm text-[var(--text-muted)]">
-          Installeer deze app via het browsermenu (Installeren / Toevoegen aan startscherm) voor
-          een standalone PWA op desktop of telefoon.
-        </p>
+        </section>
       </div>
     </div>
   );

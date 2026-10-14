@@ -28,7 +28,7 @@ export function ThemeSelector({ variant = "full" }: Props) {
     return (
       <div
         className={cn(
-          "animate-pulse rounded-lg bg-[var(--accent-soft)]",
+          "animate-pulse rounded-lg bg-[var(--bg-subtle)]",
           variant === "full" ? "h-10 w-full max-w-sm" : "h-9 w-[7.5rem]",
         )}
       />
@@ -41,7 +41,7 @@ export function ThemeSelector({ variant = "full" }: Props) {
   return (
     <div
       className={cn(
-        "flex gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1",
+        "flex gap-1 rounded-lg bg-[var(--bg-subtle)] p-1",
         variant === "full" ? "w-full max-w-sm" : "shrink-0",
       )}
       role="group"
@@ -61,8 +61,8 @@ export function ThemeSelector({ variant = "full" }: Props) {
               "flex items-center justify-center gap-1.5 rounded-md text-xs font-medium transition",
               variant === "full" ? "flex-1 px-2 py-2" : "px-2.5 py-2 max-lg:min-h-11 max-lg:min-w-11",
               active
-                ? "bg-[var(--accent-soft)] text-[var(--accent)] shadow-sm"
-                : "text-[var(--text-muted)] hover:bg-[var(--accent-soft)]/50 hover:text-[var(--text)]",
+                ? "bg-[var(--bg-panel)] text-[var(--text)] shadow-sm ring-1 ring-[var(--border)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text)]",
             )}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" />

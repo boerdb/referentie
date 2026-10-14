@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import { BrandMark } from "@/components/ui/BrandMark";
+import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -44,73 +47,135 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center p-6 max-lg:px-4 max-lg:py-[max(1.5rem,env(safe-area-inset-top))]">
-      <div className="card-login w-full max-w-md rounded-2xl p-8 max-lg:p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Referentie</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Wetenschappelijke artikelen — desktop & PWA
-        </p>
+    <div className="flex min-h-dvh flex-col items-center justify-center p-6 max-lg:px-4 max-lg:py-[max(1.5rem,env(safe-area-inset-top))]">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <BrandMark className="h-11 w-11 rounded-xl [&>svg]:h-5 [&>svg]:w-5" />
+          <h1 className="mt-4 text-xl font-semibold tracking-tight">
+            {mode === "login" ? "Inloggen bij Referentie" : "Account aanmaken"}
+          </h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Beheer, lees en citeer je wetenschappelijke literatuur.
+          </p>
+        </div>
 
-        <form onSubmit={submit} className="mt-8 space-y-3">
-          {mode === "register" && (
-            <input
-              className="input w-full rounded-lg px-3 py-2 text-sm"
-              placeholder="Naam"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          )}
-          <input
-            type="email"
-            required
-            className="input w-full rounded-lg px-3 py-2 text-sm"
-            placeholder="E-mail"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            type="password"
-            required
-            minLength={8}
-            className="input w-full rounded-lg px-3 py-2 text-sm"
-            placeholder="Wachtwoord"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full rounded-lg py-2.5 text-sm font-medium"
+        <div className="card-login rounded-xl p-6">
+          <div
+            className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-[var(--bg-subtle)] p-1"
+            role="tablist"
           >
-            {loading ? "Even geduld…" : mode === "login" ? "Inloggen" : "Account aanmaken"}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-[var(--text-muted)]">
-          {mode === "login" ? (
-            <>
-              Nog geen account?{" "}
-              <button type="button" className="text-[var(--accent)] underline" onClick={() => setMode("register")}>
-                Registreren
+            {(["login", "register"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => {
+                  setMode(m);
+                  setError("");
+                }}
+                className={cn(
+                  "rounded-md py-1.5 text-sm font-medium transition",
+                  mode === m
+                    ? "bg-[var(--bg-panel)] text-[var(--text)] shadow-sm"
+                    : "text-[var(--text-muted)] hover:text-[var(--text)]",
+                )}
+              >
+                {m === "login" ? "Inloggen" : "Registreren"}
               </button>
-            </>
-          ) : (
-            <>
-              Al een account?{" "}
-              <button type="button" className="text-[var(--accent)] underline" onClick={() => setMode("login")}>
-                Inloggen
-              </button>
-            </>
-          )}
-        </p>
+            ))}
+          </div>
 
-        <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
-          <Link href="/api/health/redis" className="underline">
-            Redis-status
+          <form onSubmit={submit} className="space-y-4">
+            {mode === "register" && (
+              <Field label="Naam" htmlFor="name">
+                <input
+                  id="name"
+                  autoComplete="name"
+                  className="input w-full rounded-lg px-3 py-2 text-sm"
+                  placeholder="Jan Jansen"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+            )}
+            <Field label="E-mailadres" htmlFor="email">
+              <input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                className="input w-full rounded-lg px-3 py-2 text-sm"
+                placeholder="naam@instelling.nl"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field>
+            <Field
+              label="Wachtwoord"
+              htmlFor="password"
+              hint={mode === "register" ? "Minimaal 8 tekens" : undefined}
+            >
+              <input
+                id="password"
+                type="password"
+                required
+                minLength={8}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                className="input w-full rounded-lg px-3 py-2 text-sm"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </Field>
+            {error && (
+              <p
+                role="alert"
+                className="rounded-lg border border-[color-mix(in_srgb,var(--danger)_30%,transparent)] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]"
+              >
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {loading ? "Even geduld…" : mode === "login" ? "Inloggen" : "Account aanmaken"}
+            </button>
+          </form>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-[var(--text-subtle)]">
+          <Link href="/api/health/redis" className="hover:text-[var(--text-muted)] hover:underline">
+            Systeemstatus
           </Link>
         </p>
       </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  htmlFor,
+  hint,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between">
+        <label htmlFor={htmlFor} className="text-sm font-medium">
+          {label}
+        </label>
+        {hint && <span className="text-xs text-[var(--text-subtle)]">{hint}</span>}
+      </div>
+      {children}
     </div>
   );
 }

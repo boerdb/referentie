@@ -62,7 +62,9 @@ export function PdfViewer({ url, title }: Props) {
           canvas.style.width = "100%";
           canvas.style.height = "auto";
           canvas.style.display = "block";
-          canvas.style.marginBottom = "8px";
+          canvas.style.marginBottom = "12px";
+          canvas.style.borderRadius = "2px";
+          canvas.style.boxShadow = "0 1px 3px rgba(16,24,40,0.12), 0 0 0 1px rgba(16,24,40,0.04)";
           canvas.dataset.page = String(pageNum);
           canvas.setAttribute("aria-label", `${title} — pagina ${pageNum}`);
           const ctx = canvas.getContext("2d");
@@ -136,7 +138,7 @@ export function PdfViewer({ url, title }: Props) {
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border)]"
       style={{ background: "var(--pdf-bg)" }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2 lg:hidden">
@@ -177,7 +179,7 @@ export function PdfViewer({ url, title }: Props) {
         )}
         <div
           ref={containerRef}
-          className="h-full overflow-auto p-2 [-webkit-overflow-scrolling:touch]"
+          className="h-full overflow-auto p-3 [-webkit-overflow-scrolling:touch]"
           style={{ scrollbarGutter: "stable" }}
         />
       </div>

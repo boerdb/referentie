@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
 import { AppProviders } from "@/components/providers/AppProviders";
 import "./globals.css";
 
@@ -10,6 +10,11 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const sourceSerif = Source_Serif_4({
+  variable: "--font-serif-display",
   subsets: ["latin"],
 });
 
@@ -40,8 +45,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#1e293b" },
-    { color: "#0284c7" },
+    { media: "(prefers-color-scheme: dark)", color: "#13161b" },
+    { color: "#ffffff" },
   ],
 };
 
@@ -51,7 +56,7 @@ export default function RootLayout({
   return (
     <html lang="nl" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} min-h-full antialiased`}
       >
         <AppProviders>{children}</AppProviders>
       </body>

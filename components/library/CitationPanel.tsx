@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, ExternalLink, Loader2, Plus, Search } from "lucide-react";
 import type { CitationCounts, CitationDirection } from "@/lib/doi/citations";
 import { cn } from "@/lib/utils";
 
@@ -161,20 +161,27 @@ export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Pr
   }
 
   return (
-    <section className="mt-4 border-t border-[var(--border)] pt-4">
+    <div>
       <button
         type="button"
-        className="btn-ghost inline-flex min-h-11 items-center rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"
+        className="btn-secondary inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs max-lg:min-h-10"
         disabled={!doi}
+        aria-expanded={open}
         title={doi ? "Bronnenlijst en citaties zoeken" : "Vul eerst een DOI in"}
         onClick={() => setOpen((value) => !value)}
       >
-        {open ? "Kruisverwijzingen verbergen" : "Kruisverwijzingen"}
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        {open ? "Verbergen" : "Bronnenlijst en citaties tonen"}
       </button>
+      {!doi && (
+        <p className="mt-2 text-xs text-[var(--text-subtle)]">
+          Beschikbaar zodra het artikel een DOI heeft.
+        </p>
+      )}
 
       {open && (
-        <div className="mt-3 space-y-3">
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-4 space-y-3">
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--bg-subtle)] p-1" role="tablist">
             {(
               [
                 ["references", "Bronnenlijst", counts.references],
@@ -184,11 +191,13 @@ export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Pr
               <button
                 key={value}
                 type="button"
+                role="tab"
+                aria-selected={direction === value}
                 className={cn(
-                  "btn-ghost min-h-11 rounded-lg border px-3 py-1 text-sm",
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition max-lg:min-h-10",
                   direction === value
-                    ? "border-[var(--accent)] text-[var(--accent)]"
-                    : "border-[var(--border)]",
+                    ? "bg-[var(--bg-panel)] text-[var(--text)] shadow-sm ring-1 ring-[var(--border)]"
+                    : "text-[var(--text-muted)] hover:text-[var(--text)]",
                 )}
                 onClick={() => setDirection(value)}
               >
@@ -199,7 +208,7 @@ export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Pr
 
           <label className="relative block">
             <span className="sr-only">Zoek in kruisverwijzingen</span>
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-subtle)]" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -225,56 +234,63 @@ export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Pr
             </p>
           )}
 
-          <ul className="space-y-3">
-            {items.map((item, index) => (
-              <li key={`${item.doi ?? "row"}-${index}`} className="min-w-0">
-                <p className="text-sm leading-snug [overflow-wrap:anywhere]">{item.title}</p>
-                <p className="mt-0.5 text-xs text-[var(--text-muted)] [overflow-wrap:anywhere]">
-                  {[item.authors, item.year, item.journal].filter(Boolean).join(" · ")}
-                </p>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  {item.doi && (
-                    <a
-                      href={`https://doi.org/${item.doi}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn-ghost inline-flex min-h-11 items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-xs"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      doi.org
-                    </a>
-                  )}
-                  {item.inLibrary && item.libraryId && (
-                    <button
-                      type="button"
-                      className="btn-ghost min-h-11 rounded-lg border border-[var(--border)] px-2 py-1 text-xs"
-                      onClick={() => onOpenInLibrary(item.libraryId as string)}
-                    >
-                      In bibliotheek
-                    </button>
-                  )}
-                  {item.doi && !item.inLibrary && (
-                    <button
-                      type="button"
-                      className="btn-ghost inline-flex min-h-11 items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-xs"
-                      disabled={addingDoi === item.doi}
-                      onClick={() => void addHit(item.doi as string)}
-                    >
-                      <Plus className="h-3 w-3" />
-                      {addingDoi === item.doi ? "Toevoegen…" : "Toevoegen"}
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+          {items.length > 0 && (
+            <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)]">
+              {items.map((item, index) => (
+                <li key={`${item.doi ?? "row"}-${index}`} className="min-w-0 px-3 py-2.5">
+                  <p className="text-sm leading-snug [overflow-wrap:anywhere]">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)] [overflow-wrap:anywhere]">
+                    {[item.authors, item.year, item.journal].filter(Boolean).join(" · ")}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {item.inLibrary && item.libraryId && (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md bg-[var(--accent-soft)] px-2 py-1 text-xs font-medium text-[var(--accent)] hover:underline max-lg:min-h-10"
+                        onClick={() => onOpenInLibrary(item.libraryId as string)}
+                      >
+                        <Check className="h-3 w-3" />
+                        In bibliotheek
+                      </button>
+                    )}
+                    {item.doi && !item.inLibrary && (
+                      <button
+                        type="button"
+                        className="btn-secondary inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs max-lg:min-h-10"
+                        disabled={addingDoi === item.doi}
+                        onClick={() => void addHit(item.doi as string)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        {addingDoi === item.doi ? "Toevoegen…" : "Toevoegen"}
+                      </button>
+                    )}
+                    {item.doi && (
+                      <a
+                        href={`https://doi.org/${item.doi}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-ghost inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs max-lg:min-h-10"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        doi.org
+                      </a>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
 
-          {loading && <p className="text-sm text-[var(--text-muted)]">Ophalen…</p>}
+          {loading && (
+            <p className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Ophalen…
+            </p>
+          )}
 
           {hasMore && !error && (
             <button
               type="button"
-              className="btn-ghost min-h-11 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"
+              className="btn-secondary w-full rounded-md px-3 py-1.5 text-xs max-lg:min-h-10"
               disabled={loading}
               onClick={() => void loadPage(page + 1, true)}
             >
@@ -283,6 +299,6 @@ export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Pr
           )}
         </div>
       )}
-    </section>
+    </div>
   );
 }
