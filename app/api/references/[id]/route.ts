@@ -6,6 +6,7 @@ import {
 } from "@/lib/references/queries";
 import type { ReferenceInput } from "@/lib/references/types";
 import { cleanDoiForLookup } from "@/lib/doi/crossref";
+import { ensureOpenAccessPdf } from "@/lib/doi/oa-pdf";
 import { deletePdfFilesForReference } from "@/lib/uploads/pdf";
 import { jsonError, jsonOk, requireSession } from "@/lib/api/http";
 
@@ -29,8 +30,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const raw = body.doi?.trim() ?? "";
     body.doi = raw ? cleanDoiForLookup(raw) : null;
   }
-  const item = await updateReference(session.userId, id, body);
-  if (!item) return jsonError("Niet gevonden.", 404);
+  const updated = await updateReference(session.userId, id, body);
+  if (!updated) return jsonError("Niet gevonden.", 404);
+  const item = body.doi
+    ? await ensureOpenAccessPdf(session.userId, updated)
+    : updated;
   return jsonOk({ item });
 }
 

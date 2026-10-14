@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { ensureOpenAccessPdf } from "@/lib/doi/oa-pdf";
 import {
   createReference,
   listReferences,
@@ -28,6 +29,9 @@ export async function POST(req: NextRequest) {
   if (!body.title?.trim()) {
     return jsonError("Titel is verplicht.", 400);
   }
-  const item = await createReference(session.userId, body);
+  const created = await createReference(session.userId, body);
+  const item = body.doi?.trim()
+    ? await ensureOpenAccessPdf(session.userId, created)
+    : created;
   return jsonOk({ item }, 201);
 }

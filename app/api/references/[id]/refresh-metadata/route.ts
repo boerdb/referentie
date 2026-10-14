@@ -5,6 +5,7 @@ import {
   fetchMetadataByDoi,
   normalizeDoi,
 } from "@/lib/doi/crossref";
+import { ensureOpenAccessPdf } from "@/lib/doi/oa-pdf";
 import { getReference, updateReference } from "@/lib/references/queries";
 import { jsonError, jsonOk, requireSession } from "@/lib/api/http";
 
@@ -46,7 +47,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     });
 
     if (!item) return jsonError("Bijwerken mislukt.", 500);
-    return jsonOk({ item });
+    const withPdf = await ensureOpenAccessPdf(session.userId, item);
+    return jsonOk({ item: withPdf });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Metadata ophalen mislukt.";
     return jsonError(msg, 400);

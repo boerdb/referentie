@@ -17,17 +17,34 @@ export function getUploadRoot(): string {
   return PDF_ROOT;
 }
 
-export async function savePdfForReference(
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
+
+export async function referenceHasPdf(
   userId: string,
   referenceId: string,
-  file: File,
+): Promise<boolean> {
+  const pool = getPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT 1 AS ok FROM attachments a
+     JOIN ref_items r ON r.id = a.reference_id
+     WHERE a.reference_id = ? AND r.user_id = ?
+     LIMIT 1`,
+    [referenceId, userId],
+  );
+  return rows.length > 0;
+}
+
+export async function savePdfBufferForReference(
+  userId: string,
+  referenceId: string,
+  buffer: Buffer,
+  originalName: string,
 ): Promise<{ attachmentId: string; storagePath: string }> {
-  if (file.type !== "application/pdf") {
-    throw new Error("Alleen PDF-bestanden zijn toegestaan.");
-  }
-  const maxBytes = 50 * 1024 * 1024;
-  if (file.size > maxBytes) {
+  if (buffer.length > MAX_PDF_BYTES) {
     throw new Error("PDF is groter dan 50 MB.");
+  }
+  if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
+    throw new Error("Alleen PDF-bestanden zijn toegestaan.");
   }
 
   const attachmentId = randomUUID();
@@ -35,7 +52,6 @@ export async function savePdfForReference(
   await mkdir(/* turbopackIgnore: true */ dir, { recursive: true });
   const fileName = `${attachmentId}.pdf`;
   const absPath = path.join(/* turbopackIgnore: true */ dir, fileName);
-  const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(/* turbopackIgnore: true */ absPath, buffer);
 
   const storagePath = path.join(userId, fileName).replace(/\\/g, "/");
@@ -51,14 +67,29 @@ export async function savePdfForReference(
     [
       attachmentId,
       referenceId,
-      sanitizeFileName(file.name),
+      sanitizeFileName(originalName),
       storagePath,
       "application/pdf",
-      file.size,
+      buffer.length,
     ],
   );
 
   return { attachmentId, storagePath };
+}
+
+export async function savePdfForReference(
+  userId: string,
+  referenceId: string,
+  file: File,
+): Promise<{ attachmentId: string; storagePath: string }> {
+  if (file.type !== "application/pdf") {
+    throw new Error("Alleen PDF-bestanden zijn toegestaan.");
+  }
+  if (file.size > MAX_PDF_BYTES) {
+    throw new Error("PDF is groter dan 50 MB.");
+  }
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return savePdfBufferForReference(userId, referenceId, buffer, file.name);
 }
 
 function sanitizeFileName(name: string): string {

@@ -89,6 +89,8 @@ export function LibraryApp({ user }: Props) {
   const [refreshingMeta, setRefreshingMeta] = useState(false);
   const [doiEdit, setDoiEdit] = useState("");
   const [doiSaving, setDoiSaving] = useState(false);
+  const [doiImporting, setDoiImporting] = useState(false);
+  const doiImportLock = useRef(false);
   const [deletingRef, setDeletingRef] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [citeCopied, setCiteCopied] = useState<string | null>(null);
@@ -312,23 +314,33 @@ export function LibraryApp({ user }: Props) {
   }
 
   async function importDoi(doi: string, save = true) {
-    const res = await fetch("/api/doi", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ doi, save }),
-    });
-    if (!res.ok) {
-      const err = (await res.json()) as { error?: string };
-      alert(err.error ?? "DOI mislukt");
-      return;
+    if (doiImportLock.current) return;
+    doiImportLock.current = true;
+    setDoiImporting(true);
+    try {
+      const res = await fetch("/api/doi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doi, save }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        alert(err.error ?? "DOI mislukt");
+        return;
+      }
+      const data = (await res.json()) as { item?: ReferenceRecord };
+      await load();
+      if (data.item) {
+        setSelectedId(data.item.id);
+        setMobilePane("detail");
+      }
+      setPaletteOpen(false);
+    } catch {
+      alert("DOI ophalen mislukt — geen verbinding.");
+    } finally {
+      doiImportLock.current = false;
+      setDoiImporting(false);
     }
-    const data = (await res.json()) as { item?: ReferenceRecord };
-    await load();
-    if (data.item) {
-      setSelectedId(data.item.id);
-      setMobilePane("detail");
-    }
-    setPaletteOpen(false);
   }
 
   async function createManual() {
@@ -1124,7 +1136,7 @@ export function LibraryApp({ user }: Props) {
                           className="btn-secondary inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs max-lg:min-h-10"
                           disabled={refreshingMeta || !doiEdit.trim()}
                           onClick={() => void refreshMetadataFromDoi()}
-                          title="Titel, abstract en overige velden via Crossref"
+                          title="Titel, abstract en open PDF via de DOI"
                         >
                           <RefreshCw
                             className={cn("h-3 w-3", refreshingMeta && "animate-spin")}
@@ -1439,9 +1451,9 @@ export function LibraryApp({ user }: Props) {
               <p className="section-label px-2.5 pt-2 pb-1">Toevoegen</p>
               <PaletteAction
                 icon={Download}
-                label="DOI importeren en opslaan"
+                label={doiImporting ? "DOI en PDF ophalen…" : "DOI importeren en open PDF opslaan"}
                 hint="Enter"
-                disabled={!paletteQuery.trim()}
+                disabled={!paletteQuery.trim() || doiImporting}
                 onClick={() => void importDoi(paletteQuery.trim(), true)}
               />
               <PaletteAction
