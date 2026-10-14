@@ -221,15 +221,21 @@ body {
 @media (max-width: 1023px) {
   html {
     -webkit-text-size-adjust: 100%;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   body {
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   .app-shell {
     background: var(--bg-panel);
+    max-width: 100%;
+    overflow-x: clip;
     padding-top: env(safe-area-inset-top, 0px);
     padding-right: env(safe-area-inset-right, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);

@@ -604,6 +604,14 @@ export function LibraryApp({ user }: Props) {
               {s === "all" ? "Alle artikelen" : STATUS_LABEL[s]}
             </FilterBtn>
           ))}
+          <Link
+            href="/zoeken"
+            className="btn-ghost flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left max-lg:py-3"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <Search className="h-4 w-4 shrink-0 text-[var(--text-subtle)]" />
+            Literatuur zoeken
+          </Link>
         </div>
         <div className="space-y-0.5">
           <p className="section-label px-2.5 pb-1.5">Filters</p>
@@ -676,7 +684,7 @@ export function LibraryApp({ user }: Props) {
   const listPane = (
     <section
       className={cn(
-        "panel flex h-full flex-col border-r lg:w-[var(--list-w)] lg:shrink-0",
+        "panel flex h-full min-w-0 flex-col overflow-x-hidden border-r lg:w-[var(--list-w)] lg:shrink-0",
         mobilePane === "detail" ? "hidden lg:flex" : "flex w-full",
       )}
     >
@@ -863,7 +871,7 @@ export function LibraryApp({ user }: Props) {
               >
                 <ChevronLeft className="h-5 w-5" /> Lijst
               </button>
-              <div className="ml-auto flex min-w-0 items-center gap-0.5">
+              <div className="ml-auto flex shrink-0 items-center">
                 <button
                   type="button"
                   onClick={() => void toggleStar()}
@@ -884,16 +892,6 @@ export function LibraryApp({ user }: Props) {
                 >
                   <Share2 className="h-4 w-4" />
                 </button>
-                <select
-                  value={selected.status}
-                  onChange={(e) => void setStatus(e.target.value as RefStatus)}
-                  className="input h-11 w-[6.75rem] min-w-0 max-w-[7.5rem] shrink rounded-lg px-1 text-sm"
-                  aria-label="Status"
-                >
-                  <option value="unread">Ongelezen</option>
-                  <option value="reading">Bezig</option>
-                  <option value="read">Gelezen</option>
-                </select>
                 <button
                   type="button"
                   title="Artikel verwijderen"
@@ -932,6 +930,29 @@ export function LibraryApp({ user }: Props) {
                 {selected.authors.map((a) => `${a.givenName} ${a.familyName}`.trim()).join(", ")}
               </p>
             </button>
+            <div
+              className="mx-3 mb-2 grid grid-cols-3 gap-1 rounded-lg bg-[var(--bg-subtle)] p-1"
+              role="radiogroup"
+              aria-label="Leesstatus"
+            >
+              {(["unread", "reading", "read"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected.status === s}
+                  onClick={() => void setStatus(s)}
+                  className={cn(
+                    "min-w-0 truncate rounded-md px-1 py-2 text-xs font-medium",
+                    selected.status === s
+                      ? "bg-[var(--bg-panel)] text-[var(--text)] shadow-sm ring-1 ring-[var(--border)]"
+                      : "text-[var(--text-muted)]",
+                  )}
+                >
+                  {STATUS_LABEL[s]}
+                </button>
+              ))}
+            </div>
             {selected.hasPdf && (
               <div
                 className="mx-3 mb-2 grid grid-cols-2 gap-1 rounded-lg bg-[var(--bg-subtle)] p-1"
@@ -1288,7 +1309,7 @@ export function LibraryApp({ user }: Props) {
                       if (f) void uploadPdf(f);
                     }}
                   />
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-3">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--bg-subtle)] text-[var(--text-muted)]">
                       <FileText className="h-4 w-4" />
                     </span>
@@ -1369,7 +1390,7 @@ export function LibraryApp({ user }: Props) {
         }}
       />
       <div
-        className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+        className="relative flex min-h-0 min-w-0 w-full max-w-full flex-1 overflow-x-clip overflow-y-hidden"
         onDragEnter={onPdfDragEnter}
         onDragLeave={onPdfDragLeave}
         onDragOver={onPdfDragOver}

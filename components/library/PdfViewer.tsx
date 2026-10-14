@@ -60,6 +60,8 @@ export function PdfViewer({ url, title }: Props) {
           canvas.width = Math.floor(viewport.width);
           canvas.height = Math.floor(viewport.height);
           canvas.style.width = "100%";
+          canvas.style.maxWidth = "100%";
+          canvas.style.minWidth = "0";
           canvas.style.height = "auto";
           canvas.style.display = "block";
           canvas.style.marginBottom = "12px";
@@ -179,7 +181,7 @@ export function PdfViewer({ url, title }: Props) {
         )}
         <div
           ref={containerRef}
-          className="h-full overflow-auto p-3 [-webkit-overflow-scrolling:touch]"
+          className="h-full overflow-x-hidden overflow-y-auto p-3 [-webkit-overflow-scrolling:touch]"
           style={{ scrollbarGutter: "stable" }}
         />
       </div>

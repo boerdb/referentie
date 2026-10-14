@@ -22,3 +22,12 @@ export async function checkDoiRateLimit(userId: string): Promise<boolean> {
   const count = await redisIncr(`doi:${userId}`, DOI_WINDOW_SEC);
   return count <= DOI_MAX;
 }
+
+const SEARCH_WINDOW_SEC = 60;
+const SEARCH_MAX = 20;
+
+export async function checkSearchRateLimit(userId: string): Promise<boolean> {
+  if (!redisConfigured()) return true;
+  const count = await redisIncr(`search:${userId}`, SEARCH_WINDOW_SEC);
+  return count <= SEARCH_MAX;
+}
