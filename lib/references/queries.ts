@@ -193,6 +193,30 @@ export async function getReferenceByDoi(
   return mapRow(row, authors);
 }
 
+/** DOI (lowercase) → referentie-id, voor kruisverwijzingen die al in de bibliotheek staan. */
+export async function findReferenceIdsByDois(
+  userId: string,
+  dois: string[],
+): Promise<Map<string, string>> {
+  const normalized = [...new Set(dois.map((doi) => doi.trim().toLowerCase()).filter(Boolean))];
+  if (normalized.length === 0) return new Map();
+
+  const pool = getPool();
+  const placeholders = normalized.map(() => "?").join(", ");
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, doi FROM ref_items
+     WHERE user_id = ? AND doi IS NOT NULL AND LOWER(doi) IN (${placeholders})`,
+    [userId, ...normalized],
+  );
+  const matches = new Map<string, string>();
+  for (const row of rows) {
+    if (typeof row.doi === "string" && typeof row.id === "string") {
+      matches.set(row.doi.toLowerCase(), row.id);
+    }
+  }
+  return matches;
+}
+
 export async function createReference(
   userId: string,
   input: ReferenceInput,

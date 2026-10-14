@@ -25,6 +25,7 @@ import {
   shareOrCopyText,
   shareOrDownloadPdf,
 } from "@/lib/share/files";
+import { CitationPanel } from "./CitationPanel";
 import { PdfViewer } from "./PdfViewer";
 import { cn } from "@/lib/utils";
 import { cleanDoiForLookup } from "@/lib/doi/normalize";
@@ -141,9 +142,16 @@ export function LibraryApp({ user }: Props) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        if (e.key === "Escape") return;
-        if (paletteOpen) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          setPaletteOpen(true);
+        }
+        return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -996,6 +1004,16 @@ export function LibraryApp({ user }: Props) {
                   </dd>
                 </div>
               </dl>
+
+              <CitationPanel
+                referenceId={selected.id}
+                doi={selected.doi}
+                onOpenInLibrary={(id) => {
+                  setSelectedId(id);
+                  setMobilePane("detail");
+                }}
+                onAdded={() => void load()}
+              />
 
               <div className="mt-4">
                 <label className="text-sm font-medium">Notities</label>
