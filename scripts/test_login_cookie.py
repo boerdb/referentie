@@ -1,12 +1,12 @@
-import paramiko
+import shlex
 
-c = paramiko.SSHClient()
-c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect("192.168.1.32", username="root", password="kerkpoort", timeout=20)
+from homelab import secret, ssh_connect
+
+c = ssh_connect("192.168.1.32", timeout=20)
 
 _, o, _ = c.exec_command(
     "ssh -o StrictHostKeyChecking=no root@192.168.1.14 "
-    "\"mysql -ureferentie -pkerkpoort referentie -N -e 'SELECT email FROM users LIMIT 5'\""
+    f"\"mysql -ureferentie -p{shlex.quote(secret('REFERENTIE_DB_PASS'))} referentie -N -e 'SELECT email FROM users LIMIT 5'\""
 )
 emails = o.read().decode().strip()
 print("users:", emails or "(none)")

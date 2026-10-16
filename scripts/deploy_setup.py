@@ -9,14 +9,15 @@ from pathlib import Path
 
 import paramiko
 
+from homelab import mysql_root, secret, ssh_connect
+
 HOST = os.environ.get("DEPLOY_HOST", "192.168.1.32")
 USER = os.environ.get("DEPLOY_USER", "root")
-PASSWORD = os.environ.get("DEPLOY_PASSWORD", "kerkpoort")
 APP_DIR = os.environ.get("DEPLOY_DIR", "/var/www/referentie")
 DB_SSH_HOST = os.environ.get("DB_SSH_HOST", "192.168.1.14")
 DB_HOST = os.environ.get("DB_HOST", "192.168.1.14")
 DB_USER = os.environ.get("DB_USER", "referentie")
-DB_PASS = os.environ.get("DB_PASS", "kerkpoort")
+DB_PASS = secret("REFERENTIE_DB_PASS")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -80,16 +81,16 @@ def run_mysql_schema(ssh_db: paramiko.SSHClient) -> None:
     with sftp.file("/tmp/referentie-schema.sql", "w") as f:
         f.write(sql)
     sftp.close()
-    run(ssh_db, "mysql -uroot -pkerkpoort < /tmp/referentie-schema.sql", check=False)
+    run(ssh_db, f"{mysql_root()} < /tmp/referentie-schema.sql", check=False)
     grant = (
         f"CREATE USER IF NOT EXISTS '{DB_USER}'@'%' IDENTIFIED BY '{DB_PASS}'; "
         f"GRANT SELECT, INSERT, UPDATE, DELETE ON referentie.* TO '{DB_USER}'@'%'; "
         f"FLUSH PRIVILEGES;"
     )
-    run(ssh_db, f'mysql -uroot -pkerkpoort -e "{grant}"', check=False)
+    run(ssh_db, f'{mysql_root()} -e "{grant}"', check=False)
     run(
         ssh_db,
-        "mysql -uroot -pkerkpoort referentie -e \"SHOW TABLES;\"",
+        f"{mysql_root()} referentie -e \"SHOW TABLES;\"",
         check=False,
     )
 
@@ -121,15 +122,11 @@ def merge_env_local(ssh: paramiko.SSHClient) -> None:
 
 
 def main() -> None:
-    ssh_app = paramiko.SSHClient()
-    ssh_app.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     print(f"Connecting app server {USER}@{HOST}...")
-    ssh_app.connect(HOST, username=USER, password=PASSWORD, timeout=30)
+    ssh_app = ssh_connect(HOST, USER)
 
-    ssh_db = paramiko.SSHClient()
-    ssh_db.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     print(f"Connecting DB server {USER}@{DB_SSH_HOST}...")
-    ssh_db.connect(DB_SSH_HOST, username=USER, password=PASSWORD, timeout=30)
+    ssh_db = ssh_connect(DB_SSH_HOST, USER)
 
     run_mysql_schema(ssh_db)
     ssh_db.close()

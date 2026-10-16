@@ -17,7 +17,7 @@ python scripts/deploy_setup.py
 Dit script:
 
 - voert `sql/schema.sql` uit op MariaDB **192.168.1.14**
-- maakt user `referentie` (default wachtwoord via `DB_PASS`, anders `kerkpoort`)
+- maakt user `referentie` (wachtwoord uit `REFERENTIE_DB_PASS` in `scripts/.secrets.local` of env; MySQL-root uit `MYSQL_ROOT_PASS`)
 - schrijft `/var/www/referentie/.env.local` op **.32**
 - clone + `scripts/deploy.sh` + PM2
 
@@ -74,4 +74,4 @@ pm2 logs referentie
 
 ## Overrides (optioneel)
 
-`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PASSWORD`, `DB_HOST`, `DB_USER`, `DB_PASS`
+`DEPLOY_HOST`, `DEPLOY_USER`, `SSH_KEY_PATH`, `SSH_KEY_PASSPHRASE`, `DB_HOST`, `DB_USER`, `REFERENTIE_DB_PASS`, `MYSQL_ROOT_PASS`

@@ -1,8 +1,6 @@
-import paramiko
+from homelab import ssh_connect
 
-c = paramiko.SSHClient()
-c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect("192.168.1.32", username="root", password="kerkpoort", timeout=20)
+c = ssh_connect("192.168.1.32", timeout=20)
 for cmd in [
     "pm2 show referentie | head -20",
     "curl -s -o /dev/null -w 'login %{http_code}\\n' http://127.0.0.1:3023/login",

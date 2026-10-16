@@ -9,7 +9,9 @@ import paramiko
 
 HOST = os.environ.get("DEPLOY_HOST", "192.168.1.32")
 USER = os.environ.get("DEPLOY_USER", "root")
-PASSWORD = os.environ.get("DEPLOY_PASSWORD", "kerkpoort")
+# Inloggen met de SSH-sleutel, niet met een wachtwoord.
+SSH_KEY_PATH = os.path.expanduser(os.environ.get("SSH_KEY_PATH", "~/.ssh/id_ed25519_homelab"))
+SSH_KEY_PASSPHRASE = os.environ.get("SSH_KEY_PASSPHRASE") or None
 APP_DIR = os.environ.get("DEPLOY_DIR", "/var/www/referentie")
 REPO = "git@github.com:boerdb/referentie.git"
 BRANCH = "main"
@@ -63,7 +65,15 @@ def main() -> None:
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     print(f"Connecting to {USER}@{HOST}...")
-    ssh.connect(HOST, username=USER, password=PASSWORD, timeout=30)
+    ssh.connect(
+        HOST,
+        username=USER,
+        key_filename=SSH_KEY_PATH,
+        passphrase=SSH_KEY_PASSPHRASE,
+        allow_agent=False,
+        look_for_keys=False,
+        timeout=30,
+    )
 
     run(ssh, "mkdir -p /var/www")
     run(
