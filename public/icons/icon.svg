@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg-ref" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f6cf7"/>
+      <stop offset="1" stop-color="#1e2f8f"/>
+    </linearGradient>
+    <radialGradient id="shine-ref" cx="0.28" cy="0.18" r="0.75">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.28"/>
+      <stop offset="0.6" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow-ref" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg-ref)"/><rect width="512" height="512" rx="116" fill="url(#shine-ref)"/>
+  
+  <g filter="url(#shadow-ref)">
+    <g transform="rotate(-8 256 270)" opacity="0.55">
+      <rect x="150" y="118" width="212" height="276" rx="26" fill="#ffffff"/>
+    </g>
+    <path d="M168 108 h140 l64 64 v214 a26 26 0 0 1 -26 26 h-178 a26 26 0 0 1 -26 -26 v-252 a26 26 0 0 1 26 -26 z" fill="#ffffff"/>
+    <path d="M308 108 v42 a22 22 0 0 0 22 22 h42 z" fill="#c7d2fe"/>
+    <rect x="186" y="214" width="150" height="16" rx="8" fill="#c7d2fe"/>
+    <rect x="186" y="252" width="150" height="16" rx="8" fill="#c7d2fe"/>
+    <rect x="186" y="290" width="104" height="16" rx="8" fill="#c7d2fe"/>
+    <rect x="186" y="336" width="62" height="16" rx="8" fill="#2f4fd8"/>
+    <path d="M196 108 h52 v104 l-26 -22 l-26 22 z" fill="#f59e0b"/>
+  </g>
+</svg>
