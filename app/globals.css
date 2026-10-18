@@ -267,8 +267,8 @@ body {
     z-index: 100;
     color: #fff;
     transition:
-      opacity 450ms ease,
-      transform 450ms ease;
+      opacity 550ms ease,
+      transform 550ms ease;
   }
 }
 .pwa-splash-out {
@@ -286,7 +286,7 @@ body {
   position: absolute;
   inset-inline: 0;
   text-align: center;
-  animation: splash-title 500ms 150ms ease-out both;
+  animation: splash-title 600ms 200ms ease-out both;
 }
 @keyframes splash-title {
   from {

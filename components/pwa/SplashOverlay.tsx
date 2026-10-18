@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 
 /** Logo-vlak in CSS-pixels; gelijk aan LOGO_CSS in scripts/generate-splash.mjs. */
 const LOGO_SIZE = 168;
-/** Minimaal zichtbaar, zodat het niet flitst als de app snel laadt. */
-const MIN_VISIBLE_MS = 700;
+/** Minimaal zichtbaar: de naam staat dan ruim een seconde volledig in beeld. */
+const MIN_VISIBLE_MS = 1900;
 
 /**
  * Opstartscherm in de app (alleen als geïnstalleerde PWA, zie .pwa-splash in globals.css).
@@ -16,6 +16,9 @@ export function SplashOverlay() {
   const [phase, setPhase] = useState<"show" | "out" | "gone">("show");
 
   useEffect(() => {
+    // Tikken slaat het opstartscherm over.
+    const skip = () => setPhase((p) => (p === "show" ? "out" : p));
+    window.addEventListener("pointerdown", skip, { once: true });
     const started = performance.now();
     let outTimer = 0;
     let goneTimer = 0;
@@ -24,17 +27,24 @@ export function SplashOverlay() {
       const wait = Math.max(0, (reduced ? 200 : MIN_VISIBLE_MS) - (performance.now() - started));
       outTimer = window.setTimeout(() => {
         setPhase("out");
-        goneTimer = window.setTimeout(() => setPhase("gone"), reduced ? 0 : 450);
+        goneTimer = window.setTimeout(() => setPhase("gone"), reduced ? 0 : 550);
       }, wait);
     };
     if (document.readyState === "complete") finish();
     else window.addEventListener("load", finish, { once: true });
     return () => {
+      window.removeEventListener("pointerdown", skip);
       window.removeEventListener("load", finish);
       window.clearTimeout(outTimer);
       window.clearTimeout(goneTimer);
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== "out") return;
+    const t = window.setTimeout(() => setPhase("gone"), 550);
+    return () => window.clearTimeout(t);
+  }, [phase]);
 
   if (phase === "gone") return null;
 
