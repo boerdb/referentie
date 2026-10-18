@@ -48,8 +48,10 @@ export function authorList(authors: ReferenceRecord["authors"]) {
   return authors.map((a) => `${a.givenName} ${a.familyName}`.trim()).join(", ");
 }
 
-export function StatusDot({ status }: { status: RefStatus }) {
-  return <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_DOT[status])} aria-hidden />;
+export function StatusDot({ status, className }: { status: RefStatus; className?: string }) {
+  return (
+    <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_DOT[status], className)} aria-hidden />
+  );
 }
 
 export function StatusBadge({ status }: { status: RefStatus }) {

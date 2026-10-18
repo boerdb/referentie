@@ -51,8 +51,8 @@ type Props = {
 };
 
 const DEFAULT_VIEW: LibraryView = { status: "all", starred: false, hasPdf: false, trash: false };
-const INSPECTOR_DEFAULT = 440;
-const INSPECTOR_MIN = 340;
+const INSPECTOR_DEFAULT = 400;
+const INSPECTOR_MIN = 320;
 const INSPECTOR_MAX = 760;
 
 type Selection = { ids: Set<string>; primary: string | null; anchor: string | null };

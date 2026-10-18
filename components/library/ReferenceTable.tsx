@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Columns3, FileText, Star } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Columns3, FileText, Star } from "lucide-react";
 import type { ReferenceRecord } from "@/lib/references/types";
 import { cn } from "@/lib/utils";
 import { STATUS_LABEL, StatusDot, authorShort } from "./shared";
@@ -19,7 +19,8 @@ type Column = {
   /** Kan niet verborgen worden. */
   fixed?: boolean;
   align?: "center" | "right";
-  sortValue: (r: ReferenceRecord) => string | number;
+  /** `null` = leeg; lege waarden komen altijd onderaan. */
+  sortValue: (r: ReferenceRecord) => string | number | null;
 };
 
 export const COLUMNS: Column[] = [
@@ -27,27 +28,28 @@ export const COLUMNS: Column[] = [
   {
     id: "author",
     label: "Auteur",
-    width: 150,
+    width: 130,
     min: 80,
-    sortValue: (r) => (r.authors[0]?.familyName ?? "").toLocaleLowerCase("nl"),
+    sortValue: (r) => r.authors[0]?.familyName?.toLocaleLowerCase("nl") || null,
   },
-  { id: "year", label: "Jaar", width: 58, min: 48, align: "right", sortValue: (r) => r.year ?? 0 },
-  { id: "title", label: "Titel", width: null, min: 160, fixed: true, sortValue: (r) => r.title.toLocaleLowerCase("nl") },
+  { id: "year", label: "Jaar", width: 52, min: 46, align: "right", sortValue: (r) => r.year ?? null },
+  { id: "title", label: "Titel", width: null, min: 200, fixed: true, sortValue: (r) => r.title.toLocaleLowerCase("nl") },
   {
     id: "journal",
     label: "Tijdschrift",
-    width: 150,
+    width: 130,
     min: 80,
-    sortValue: (r) => (r.journal ?? "").toLocaleLowerCase("nl"),
+    sortValue: (r) => r.journal?.toLocaleLowerCase("nl") || null,
   },
   {
     id: "status",
     label: "Status",
-    width: 92,
-    min: 70,
+    width: 34,
+    min: 34,
+    align: "center",
     sortValue: (r) => ({ unread: 0, reading: 1, read: 2 })[r.status],
   },
-  { id: "pdf", label: "PDF", width: 40, min: 36, align: "center", sortValue: (r) => (r.hasPdf ? 0 : 1) },
+  { id: "pdf", label: "PDF", width: 34, min: 34, align: "center", sortValue: (r) => (r.hasPdf ? 0 : 1) },
   { id: "added", label: "Toegevoegd", width: 96, min: 80, align: "right", sortValue: (r) => r.createdAt },
 ];
 
@@ -62,6 +64,7 @@ export function sortReferences(items: ReferenceRecord[], sort: SortState): Refer
   return [...items].sort((a, b) => {
     const x = column.sortValue(a);
     const y = column.sortValue(b);
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
     if (x < y) return -1 * factor;
     if (x > y) return 1 * factor;
     return 0;
@@ -190,6 +193,8 @@ export function ReferenceTable({
             >
               {c.id === "starred" ? (
                 <Star className="h-3.5 w-3.5" aria-label="Favoriet" />
+              ) : c.id === "status" ? (
+                <Circle className="h-3 w-3" aria-label="Leesstatus" />
               ) : c.id === "pdf" ? (
                 <FileText className="h-3.5 w-3.5" aria-label="PDF" />
               ) : (
@@ -322,10 +327,11 @@ function Cell({ column, item }: { column: ColumnId; item: ReferenceRecord }) {
     case "journal":
       return <>{item.journal ?? ""}</>;
     case "status":
+      // Alleen een stip, zodat de titel ruimte houdt; de status staat in de tooltip.
       return (
-        <span className="inline-flex items-center gap-1.5">
-          <StatusDot status={item.status} />
-          {STATUS_LABEL[item.status]}
+        <span className="inline-flex h-full items-center" title={STATUS_LABEL[item.status]}>
+          <StatusDot status={item.status} className="h-2 w-2" />
+          <span className="sr-only">{STATUS_LABEL[item.status]}</span>
         </span>
       );
     case "pdf":
