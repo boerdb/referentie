@@ -38,6 +38,7 @@ export default function LoginPage() {
         return;
       }
       // Volledige navigatie zodat de sessiecookie zeker meekomt
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/bibliotheek");
     } catch {
       setError("Geen verbinding met de server.");

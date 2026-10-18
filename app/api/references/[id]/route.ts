@@ -4,11 +4,11 @@ import {
   getReference,
   updateReference,
 } from "@/lib/references/queries";
-import type { ReferenceInput } from "@/lib/references/types";
+import { parseReferenceInput } from "@/lib/references/validate";
 import { cleanDoiForLookup } from "@/lib/doi/crossref";
 import { ensureOpenAccessPdf } from "@/lib/doi/oa-pdf";
 import { deletePdfFilesForReference } from "@/lib/uploads/pdf";
-import { jsonError, jsonOk, requireSession } from "@/lib/api/http";
+import { jsonError, jsonOk, readJson, requireSession } from "@/lib/api/http";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -25,7 +25,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const session = await requireSession(req);
   if (session instanceof Response) return session;
   const { id } = await ctx.params;
-  const body = (await req.json()) as Partial<ReferenceInput>;
+  const parsed = parseReferenceInput(await readJson(req), { partial: true });
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+  const body = parsed.value;
   if (body.doi !== undefined) {
     const raw = body.doi?.trim() ?? "";
     body.doi = raw ? cleanDoiForLookup(raw) : null;

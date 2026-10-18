@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Share2 } from "lucide-react";
 import { pdfFileNameFromTitle, shareOrDownloadPdf } from "@/lib/share/files";
+import { useToast } from "@/components/ui/Toaster";
 
 type Props = {
   url: string;
@@ -10,6 +11,7 @@ type Props = {
 };
 
 export function PdfViewer({ url, title }: Props) {
+  const toast = useToast();
   const measureRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -132,7 +134,7 @@ export function PdfViewer({ url, title }: Props) {
         title,
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Delen mislukt.");
+      toast.error("Delen mislukt", err instanceof Error ? err.message : undefined);
     } finally {
       setSharing(false);
     }

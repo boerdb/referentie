@@ -1,3 +1,5 @@
+import { lookup } from "dns/promises";
+import { isIP } from "net";
 import { cleanDoiForLookup } from "@/lib/doi/normalize";
 import { getReference } from "@/lib/references/queries";
 import type { ReferenceRecord } from "@/lib/references/types";
@@ -10,6 +12,7 @@ const LOOKUP_MS = 10_000;
 const DOWNLOAD_MS = 20_000;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const MAX_CANDIDATES = 4;
+const MAX_REDIRECTS = 5;
 const MAILTO = "support@clvs.nl";
 const USER_AGENT = "ReferentiePWA/1.0 (mailto:support@clvs.nl)";
 
@@ -36,6 +39,29 @@ type EuropePmc = {
   };
 };
 
+function isPrivateIp(ip: string): boolean {
+  const v4 = ip.match(/^(?:::ffff:)?(\d+)\.(\d+)\.(\d+)\.(\d+)$/i);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    return false;
+  }
+  const v6 = ip.toLowerCase();
+  return (
+    v6 === "::" ||
+    v6 === "::1" ||
+    v6.startsWith("fc") ||
+    v6.startsWith("fd") ||
+    v6.startsWith("fe80") ||
+    v6.startsWith("::ffff:")
+  );
+}
+
 function isPublicHttpsUrl(raw: string): boolean {
   let url: URL;
   try {
@@ -53,20 +79,21 @@ function isPublicHttpsUrl(raw: string): boolean {
   ) {
     return false;
   }
-  const ipv4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (ipv4) {
-    const a = Number(ipv4[1]);
-    const b = Number(ipv4[2]);
-    if (a === 0 || a === 10 || a === 127) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false;
-  }
-  if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) {
+  if (isIP(host) && isPrivateIp(host)) return false;
+  return true;
+}
+
+/** Ook de opgeloste adressen controleren: een publieke naam kan naar een LAN-adres wijzen. */
+async function resolvesToPublicHost(raw: string): Promise<boolean> {
+  if (!isPublicHttpsUrl(raw)) return false;
+  const host = new URL(raw).hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host)) return true;
+  try {
+    const addresses = await lookup(host, { all: true, verbatim: true });
+    return addresses.length > 0 && addresses.every((a) => !isPrivateIp(a.address));
+  } catch {
     return false;
   }
-  return true;
 }
 
 function addUrl(out: string[], raw: string | null | undefined) {
@@ -143,17 +170,32 @@ async function readLimited(res: Response): Promise<Buffer | null> {
   return Buffer.concat(chunks);
 }
 
-async function downloadPdf(url: string): Promise<Buffer | null> {
-  try {
-    const res = await fetch(url, {
-      redirect: "follow",
+/** Volgt redirects zelf, zodat elke tussenstap op een intern adres wordt gecontroleerd. */
+async function fetchPublic(url: string, signal: AbortSignal): Promise<Response | null> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!(await resolvesToPublicHost(current))) return null;
+    const res = await fetch(current, {
+      redirect: "manual",
       headers: {
         Accept: "application/pdf,*/*;q=0.8",
         "User-Agent": USER_AGENT,
       },
-      signal: AbortSignal.timeout(DOWNLOAD_MS),
+      signal,
     });
-    if (!res.ok || !isPublicHttpsUrl(res.url)) return null;
+    if (res.status < 300 || res.status >= 400) return res;
+    const location = res.headers.get("location");
+    await res.body?.cancel();
+    if (!location) return null;
+    current = new URL(location, current).toString();
+  }
+  return null;
+}
+
+async function downloadPdf(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetchPublic(url, AbortSignal.timeout(DOWNLOAD_MS));
+    if (!res?.ok) return null;
     const declared = Number(res.headers.get("content-length") ?? "0");
     if (declared > MAX_PDF_BYTES) return null;
     const buffer = await readLimited(res);

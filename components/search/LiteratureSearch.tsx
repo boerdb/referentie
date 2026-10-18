@@ -6,6 +6,8 @@ import { ArrowLeft, ExternalLink, Loader2, Plus, Search } from "lucide-react";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { SEARCH_SOURCES, type SearchHit, type SearchSource } from "@/lib/search/literature";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api/client";
+import { useToast } from "@/components/ui/Toaster";
 
 type Hit = SearchHit & { inLibrary: boolean; libraryId: string | null };
 
@@ -17,6 +19,7 @@ type SearchResponse = {
 };
 
 export function LiteratureSearch() {
+  const toast = useToast();
   const [source, setSource] = useState<SearchSource>("pubmed");
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
@@ -62,45 +65,33 @@ export function LiteratureSearch() {
 
   async function addHit(hit: Hit) {
     setAddingId(hit.id);
-    try {
-      const res = hit.doi
-        ? await fetch("/api/doi", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ doi: hit.doi, save: true }),
-          })
-        : await fetch("/api/references", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              title: hit.title,
-              year: hit.year,
-              journal: hit.journal,
-              doi: null,
-              pmid: hit.pmid,
-              url: hit.url,
-              authors: hit.authors
-                ? [{ familyName: hit.authors, givenName: "" }]
-                : [],
-            }),
-          });
-      const data = (await res.json()) as { error?: string; item?: { id: string } };
-      if (!res.ok || !data.item) {
-        alert(data.error ?? "Toevoegen mislukt");
-        return;
-      }
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === hit.id ? { ...item, inLibrary: true, libraryId: data.item?.id ?? null } : item,
-        ),
-      );
-    } catch {
-      alert("Toevoegen mislukt — geen verbinding.");
-    } finally {
-      setAddingId(null);
+    const res = hit.doi
+      ? await api<{ item?: { id: string } }>("/api/doi", {
+          method: "POST",
+          body: { doi: hit.doi, save: true },
+        })
+      : await api<{ item?: { id: string } }>("/api/references", {
+          method: "POST",
+          body: {
+            title: hit.title,
+            year: hit.year,
+            journal: hit.journal,
+            doi: null,
+            pmid: hit.pmid,
+            url: hit.url,
+            authors: hit.authors ? [{ familyName: hit.authors, givenName: "" }] : [],
+          },
+        });
+    setAddingId(null);
+    if (!res.ok || !res.data.item) {
+      toast.error("Toevoegen mislukt", res.ok ? undefined : res.error);
+      return;
     }
+    const libraryId = res.data.item.id;
+    setItems((prev) =>
+      prev.map((item) => (item.id === hit.id ? { ...item, inLibrary: true, libraryId } : item)),
+    );
+    toast.success("Toegevoegd aan de bibliotheek");
   }
 
   return (

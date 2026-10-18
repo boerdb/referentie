@@ -64,17 +64,42 @@ function mapRow(row: RefRow, authors: AuthorRow[]): ReferenceRecord {
 }
 
 async function loadAuthors(referenceId: string): Promise<AuthorRow[]> {
+  return (await loadAuthorsFor([referenceId])).get(referenceId) ?? [];
+}
+
+/** Auteurs van meerdere referenties in één query, gegroepeerd per referentie-id. */
+async function loadAuthorsFor(
+  referenceIds: string[],
+): Promise<Map<string, AuthorRow[]>> {
+  const byRef = new Map<string, AuthorRow[]>();
+  if (referenceIds.length === 0) return byRef;
   const pool = getPool();
-  const [rows] = await pool.query<AuthorRow[]>(
-    `SELECT a.given_name, a.family_name, ra.position
+  const [rows] = await pool.query<(AuthorRow & { reference_id: string })[]>(
+    `SELECT ra.reference_id, a.given_name, a.family_name, ra.position
      FROM reference_authors ra
      JOIN authors a ON a.id = ra.author_id
-     WHERE ra.reference_id = ?
-     ORDER BY ra.position`,
-    [referenceId],
+     WHERE ra.reference_id IN (?)
+     ORDER BY ra.reference_id, ra.position`,
+    [referenceIds],
   );
-  return rows;
+  for (const row of rows) {
+    const list = byRef.get(row.reference_id);
+    if (list) list.push(row);
+    else byRef.set(row.reference_id, [row]);
+  }
+  return byRef;
 }
+
+/** Referentie met de eerste bijlage, zonder gecorreleerde subqueries per rij. */
+const REF_SELECT = `SELECT r.*,
+      att.attachment_id IS NOT NULL AS has_pdf,
+      att.attachment_id
+     FROM ref_items r
+     LEFT JOIN (
+       SELECT reference_id, MIN(id) AS attachment_id
+       FROM attachments
+       GROUP BY reference_id
+     ) att ON att.reference_id = r.id`;
 
 async function upsertAuthors(
   referenceId: string,
@@ -123,33 +148,38 @@ export async function listReferences(
     where.push("r.starred = 1");
   }
   if (filters.hasPdf) {
-    where.push("EXISTS (SELECT 1 FROM attachments att WHERE att.reference_id = r.id)");
+    where.push("att.attachment_id IS NOT NULL");
   }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
+    const like = `%${escapeLike(q)}%`;
     where.push(
-      "(MATCH(r.title, r.abstract, r.journal) AGAINST (? IN NATURAL LANGUAGE MODE) OR r.title LIKE ? OR r.doi LIKE ?)",
+      `(MATCH(r.title, r.abstract, r.journal) AGAINST (? IN NATURAL LANGUAGE MODE)
+        OR r.title LIKE ? OR r.doi LIKE ?
+        OR EXISTS (
+          SELECT 1 FROM reference_authors ra
+          JOIN authors a ON a.id = ra.author_id
+          WHERE ra.reference_id = r.id
+            AND (a.family_name LIKE ? OR CONCAT(a.given_name, ' ', a.family_name) LIKE ?)
+        ))`,
     );
-    params.push(q, `%${q}%`, `%${q}%`);
+    params.push(q, like, like, like, like);
   }
 
   const [rows] = await pool.query<RefRow[]>(
-    `SELECT r.*,
-      EXISTS (SELECT 1 FROM attachments att WHERE att.reference_id = r.id) AS has_pdf,
-      (SELECT att.id FROM attachments att WHERE att.reference_id = r.id LIMIT 1) AS attachment_id
-     FROM ref_items r
+    `${REF_SELECT}
      WHERE ${where.join(" AND ")}
      ORDER BY r.updated_at DESC
      LIMIT 500`,
     params,
   );
 
-  const out: ReferenceRecord[] = [];
-  for (const row of rows) {
-    const authors = await loadAuthors(row.id);
-    out.push(mapRow(row, authors));
-  }
-  return out;
+  const authors = await loadAuthorsFor(rows.map((row) => row.id));
+  return rows.map((row) => mapRow(row, authors.get(row.id) ?? []));
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
 }
 
 export async function getReference(
@@ -158,10 +188,7 @@ export async function getReference(
 ): Promise<ReferenceRecord | null> {
   const pool = getPool();
   const [rows] = await pool.query<RefRow[]>(
-    `SELECT r.*,
-      EXISTS (SELECT 1 FROM attachments att WHERE att.reference_id = r.id) AS has_pdf,
-      (SELECT att.id FROM attachments att WHERE att.reference_id = r.id LIMIT 1) AS attachment_id
-     FROM ref_items r
+    `${REF_SELECT}
      WHERE r.id = ? AND r.user_id = ?
      LIMIT 1`,
     [id, userId],
@@ -179,10 +206,7 @@ export async function getReferenceByDoi(
   const pool = getPool();
   const normalized = doi.trim().toLowerCase();
   const [rows] = await pool.query<RefRow[]>(
-    `SELECT r.*,
-      EXISTS (SELECT 1 FROM attachments att WHERE att.reference_id = r.id) AS has_pdf,
-      (SELECT att.id FROM attachments att WHERE att.reference_id = r.id LIMIT 1) AS attachment_id
-     FROM ref_items r
+    `${REF_SELECT}
      WHERE r.user_id = ? AND LOWER(r.doi) = ?
      LIMIT 1`,
     [userId, normalized],

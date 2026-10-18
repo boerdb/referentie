@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Lokale geheimen voor scripts (MYSQL_ROOT_PASS, REFERENTIE_DB_PASS, ...)
 scripts/.secrets.local
+
+# Python
+__pycache__/

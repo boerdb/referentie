@@ -1,6 +1,5 @@
 import {
   destroySession,
-  getSessionFromRequest,
   SESSION_COOKIE,
 } from "@/lib/auth/session";
 import { jsonOk } from "@/lib/api/http";

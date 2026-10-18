@@ -1,4 +1,4 @@
-const CACHE = "referentie-shell-v3";
+const CACHE = "referentie-shell-v4";
 const SHELL = ["/", "/bibliotheek", "/login", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -26,8 +26,11 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(request, copy));
+          // Alleen echte pagina's bewaren, geen redirects naar /login of foutpagina's.
+          if (res.ok && !res.redirected) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy));
+          }
           return res;
         })
         .catch(() => caches.match(request).then((r) => r || caches.match("/bibliotheek"))),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -20,9 +20,12 @@ type Props = {
 
 export function ThemeSelector({ variant = "full" }: Props) {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  // Het thema is pas na hydratatie bekend; op de server altijd de placeholder tonen.
+  const mounted = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
 
   if (!mounted) {
     return (
@@ -72,4 +75,8 @@ export function ThemeSelector({ variant = "full" }: Props) {
       })}
     </div>
   );
+}
+
+function noopSubscribe() {
+  return () => {};
 }

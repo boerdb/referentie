@@ -12,7 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Gekopieerde pdf.js-worker en andere statische bestanden
+    "public/**",
   ]),
+  {
+    // PM2-config draait als CommonJS buiten Next.js
+    files: ["**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;

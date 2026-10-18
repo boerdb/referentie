@@ -5,7 +5,8 @@ import {
   listReferences,
 } from "@/lib/references/queries";
 import type { ReferenceInput } from "@/lib/references/types";
-import { jsonError, jsonOk, requireSession } from "@/lib/api/http";
+import { jsonError, jsonOk, readJson, requireSession } from "@/lib/api/http";
+import { parseReferenceInput } from "@/lib/references/validate";
 
 export async function GET(req: NextRequest) {
   const session = await requireSession(req);
@@ -25,10 +26,9 @@ export async function POST(req: NextRequest) {
   const session = await requireSession(req);
   if (session instanceof Response) return session;
 
-  const body = (await req.json()) as ReferenceInput;
-  if (!body.title?.trim()) {
-    return jsonError("Titel is verplicht.", 400);
-  }
+  const parsed = parseReferenceInput(await readJson(req), { partial: false });
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+  const body = parsed.value as ReferenceInput;
   const created = await createReference(session.userId, body);
   const item = body.doi?.trim()
     ? await ensureOpenAccessPdf(session.userId, created)

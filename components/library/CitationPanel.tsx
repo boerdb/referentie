@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ExternalLink, Loader2, Plus, Search } from "lucide-react";
 import type { CitationCounts, CitationDirection } from "@/lib/doi/citations";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api/client";
+import { useToast } from "@/components/ui/Toaster";
 
 type Hit = {
   doi: string | null;
@@ -36,6 +38,7 @@ type Props = {
 const emptyCounts: CitationCounts = { references: null, citedBy: null };
 
 export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Props) {
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<CitationDirection>("references");
   const [query, setQuery] = useState("");
@@ -51,24 +54,6 @@ export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Pr
   const [error, setError] = useState<string | null>(null);
   const [addingDoi, setAddingDoi] = useState<string | null>(null);
   const requestGen = useRef(0);
-  const skipFetch = useRef(false);
-
-  useEffect(() => {
-    skipFetch.current = true;
-    requestGen.current += 1;
-    setOpen(false);
-    setDirection("references");
-    setQuery("");
-    setDebouncedQuery("");
-    setItems([]);
-    setTotal(0);
-    setPage(1);
-    setCounts(emptyCounts);
-    setNote(null);
-    setSource(null);
-    setError(null);
-    setLoading(false);
-  }, [referenceId]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -113,43 +98,31 @@ export function CitationPanel({ referenceId, doi, onOpenInLibrary, onAdded }: Pr
     [direction, debouncedQuery, referenceId],
   );
 
+  // Een ander artikel krijgt een nieuwe instantie via `key`, dus hier geen reset nodig.
+  // Via een timer, zodat snel wisselen van richting maar één verzoek geeft.
   useEffect(() => {
-    if (!open) {
-      skipFetch.current = false;
-      return;
-    }
-    if (skipFetch.current) {
-      skipFetch.current = false;
-      return;
-    }
-    void loadPage(1, false);
+    if (!open) return;
+    const timer = setTimeout(() => void loadPage(1, false), 0);
+    return () => clearTimeout(timer);
   }, [open, loadPage]);
 
   async function addHit(hitDoi: string) {
     setAddingDoi(hitDoi);
-    try {
-      const res = await fetch("/api/doi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ doi: hitDoi, save: true }),
-      });
-      const data = (await res.json()) as { error?: string; item?: { id: string } };
-      if (!res.ok || !data.item) {
-        alert(data.error ?? "Toevoegen mislukt");
-        return;
-      }
-      setItems((prev) =>
-        prev.map((item) =>
-          item.doi === hitDoi ? { ...item, inLibrary: true, libraryId: data.item?.id ?? null } : item,
-        ),
-      );
-      onAdded();
-    } catch {
-      alert("Toevoegen mislukt — geen verbinding.");
-    } finally {
-      setAddingDoi(null);
+    const res = await api<{ item?: { id: string } }>("/api/doi", {
+      method: "POST",
+      body: { doi: hitDoi, save: true },
+    });
+    setAddingDoi(null);
+    if (!res.ok || !res.data.item) {
+      toast.error("Toevoegen mislukt", res.ok ? undefined : res.error);
+      return;
     }
+    const libraryId = res.data.item.id;
+    setItems((prev) =>
+      prev.map((item) => (item.doi === hitDoi ? { ...item, inLibrary: true, libraryId } : item)),
+    );
+    toast.success("Toegevoegd aan de bibliotheek");
+    onAdded();
   }
 
   const hasMore = page * pageSize < total;

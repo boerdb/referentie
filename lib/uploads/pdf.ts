@@ -3,6 +3,9 @@ import path from "path";
 import { randomUUID } from "crypto";
 import type { RowDataPacket } from "mysql2";
 import { getPool } from "@/lib/db/mysql";
+import { looksLikePdfFile } from "./is-pdf";
+
+export { looksLikePdfFile };
 
 const PDF_ROOT = path.join(process.cwd(), "data", "pdfs");
 
@@ -57,6 +60,11 @@ export async function savePdfBufferForReference(
   const storagePath = path.join(userId, fileName).replace(/\\/g, "/");
   const pool = getPool();
 
+  const [previous] = await pool.query<AttRow[]>(
+    "SELECT storage_path FROM attachments WHERE reference_id = ?",
+    [referenceId],
+  );
+
   await pool.query("DELETE FROM attachments WHERE reference_id = ?", [
     referenceId,
   ]);
@@ -74,7 +82,20 @@ export async function savePdfBufferForReference(
     ],
   );
 
+  // Het oude bestand pas weghalen nadat de nieuwe bijlage in de database staat.
+  for (const row of previous) await unlinkStored(row.storage_path);
+
   return { attachmentId, storagePath };
+}
+
+async function unlinkStored(storagePath: string): Promise<void> {
+  try {
+    await unlink(
+      path.join(/* turbopackIgnore: true */ getUploadRoot(), storagePath),
+    );
+  } catch {
+    /* ignore missing file */
+  }
 }
 
 export async function savePdfForReference(
@@ -82,7 +103,7 @@ export async function savePdfForReference(
   referenceId: string,
   file: File,
 ): Promise<{ attachmentId: string; storagePath: string }> {
-  if (file.type !== "application/pdf") {
+  if (!looksLikePdfFile(file)) {
     throw new Error("Alleen PDF-bestanden zijn toegestaan.");
   }
   if (file.size > MAX_PDF_BYTES) {
@@ -138,13 +159,5 @@ export async function deletePdfFilesForReference(
      WHERE a.reference_id = ? AND r.user_id = ?`,
     [referenceId, userId],
   );
-  for (const row of rows) {
-    try {
-      await unlink(
-        path.join(/* turbopackIgnore: true */ getUploadRoot(), row.storage_path),
-      );
-    } catch {
-      /* ignore missing file */
-    }
-  }
+  for (const row of rows) await unlinkStored(row.storage_path);
 }

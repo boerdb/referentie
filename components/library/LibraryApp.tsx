@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ThemeSelector } from "@/components/theme/ThemeSelector";
 import {
   BookOpen,
@@ -45,12 +46,20 @@ import { CitationPanel } from "./CitationPanel";
 import { PdfViewer } from "./PdfViewer";
 import { cn } from "@/lib/utils";
 import { cleanDoiForLookup } from "@/lib/doi/normalize";
+import { api } from "@/lib/api/client";
+import { looksLikePdfFile } from "@/lib/uploads/is-pdf";
+import { clearOfflineCache } from "@/lib/pwa/cache";
+import { useToast } from "@/components/ui/Toaster";
 
 type Props = {
   user: SessionPayload;
 };
 
 type FilterStatus = RefStatus | "all";
+
+type NoteStatus = "idle" | "saving" | "saved" | "error";
+
+type Highlight = { id: string; page: number; quote: string | null; color: string };
 
 const emptyForm = {
   title: "",
@@ -62,6 +71,8 @@ const emptyForm = {
 };
 
 export function LibraryApp({ user }: Props) {
+  const toast = useToast();
+  const router = useRouter();
   const [items, setItems] = useState<ReferenceRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -70,10 +81,11 @@ export function LibraryApp({ user }: Props) {
   const [hasPdfOnly, setHasPdfOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
-  const [noteSaving, setNoteSaving] = useState(false);
-  const [highlights, setHighlights] = useState<
-    { id: string; page: number; quote: string | null; color: string }[]
-  >([]);
+  const [noteStatus, setNoteStatus] = useState<NoteStatus>("idle");
+  const [highlightState, setHighlightState] = useState<{
+    attachmentId: string | null;
+    items: Highlight[];
+  }>({ attachmentId: null, items: [] });
   const [hlPage, setHlPage] = useState("1");
   const [hlQuote, setHlQuote] = useState("");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -99,11 +111,34 @@ export function LibraryApp({ user }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
   const pdfDropDepth = useRef(0);
+  const loadGen = useRef(0);
+  /** Laatst opgeslagen notitie per referentie; autosave start pas als deze geladen is. */
+  const noteSaved = useRef<{ refId: string | null; body: string }>({ refId: null, body: "" });
+  const latestNote = useRef("");
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
     [items, selectedId],
   );
+  const highlights =
+    highlightState.attachmentId === selected?.attachmentId ? highlightState.items : [];
+
+  // Velden die bij een ander artikel opnieuw beginnen: state aanpassen tijdens het
+  // renderen in plaats van in een effect.
+  const [syncedWith, setSyncedWith] = useState<{ id: string | null; doi: string | null }>({
+    id: null,
+    doi: null,
+  });
+  const currentId = selected?.id ?? null;
+  const currentDoi = selected?.doi ?? null;
+  if (syncedWith.id !== currentId || syncedWith.doi !== currentDoi) {
+    if (syncedWith.id !== currentId) {
+      setTitleExpanded(false);
+      setMobileDetailTab("info");
+    }
+    setDoiEdit(currentDoi ?? "");
+    setSyncedWith({ id: currentId, doi: currentDoi });
+  }
 
   const listTitle =
     [
@@ -115,57 +150,119 @@ export function LibraryApp({ user }: Props) {
       .join(" · ");
 
   const load = useCallback(async () => {
+    const gen = ++loadGen.current;
     setLoading(true);
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
     if (filterStatus !== "all") params.set("status", filterStatus);
     if (starredOnly) params.set("starred", "1");
     if (hasPdfOnly) params.set("hasPdf", "1");
-    const res = await fetch(`/api/references?${params}`);
-    const data = (await res.json()) as { items?: ReferenceRecord[] };
-    const list = data.items ?? [];
-    setItems(list);
-    if (!selectedId && list[0]) setSelectedId(list[0].id);
+    const res = await api<{ items?: ReferenceRecord[] }>(`/api/references?${params}`);
+    // Een trager, ouder antwoord mag een nieuwere zoekopdracht niet overschrijven.
+    if (gen !== loadGen.current) return;
     setLoading(false);
-  }, [query, filterStatus, starredOnly, hasPdfOnly, selectedId]);
+    if (!res.ok) {
+      if (res.status === 401) router.replace("/login");
+      else toast.error("Bibliotheek laden mislukt", res.error);
+      return;
+    }
+    const list = res.data.items ?? [];
+    setItems(list);
+    setSelectedId((current) => current ?? list[0]?.id ?? null);
+  }, [query, filterStatus, starredOnly, hasPdfOnly, router, toast]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200);
     return () => clearTimeout(t);
   }, [load]);
 
-  const loadNote = useCallback(async (id: string) => {
-    const res = await fetch(`/api/references/${id}/notes`);
-    const data = (await res.json()) as { note?: { body: string } | null };
-    setNote(data.note?.body ?? "");
+  /** Vervangt één artikel in de lijst zonder de hele lijst opnieuw op te halen. */
+  const replaceItem = useCallback((item: ReferenceRecord) => {
+    setItems((list) => list.map((i) => (i.id === item.id ? item : i)));
   }, []);
 
-  const loadHighlights = useCallback(async (attachmentId: string) => {
-    const res = await fetch(`/api/highlights?attachmentId=${attachmentId}`);
-    const data = (await res.json()) as {
-      items?: { id: string; page: number; quote: string | null; color: string }[];
+  const persistNote = useCallback(
+    async (refId: string, body: string) => {
+      setNoteStatus("saving");
+      const res = await api(`/api/references/${refId}/notes`, {
+        method: "POST",
+        body: { body },
+      });
+      if (!res.ok) {
+        setNoteStatus("error");
+        toast.error("Notitie niet opgeslagen", res.error);
+        return;
+      }
+      if (noteSaved.current.refId === refId) noteSaved.current.body = body;
+      setNoteStatus("saved");
+    },
+    [toast],
+  );
+
+  // Notitie laden bij een ander artikel; een openstaande wijziging eerst wegschrijven.
+  useEffect(() => {
+    const previous = noteSaved.current;
+    if (previous.refId && previous.refId !== selectedId && latestNote.current !== previous.body) {
+      void persistNote(previous.refId, latestNote.current);
+    }
+    noteSaved.current = { refId: null, body: "" };
+    if (!selectedId) return;
+    let cancelled = false;
+    void api<{ note?: { body: string } | null }>(`/api/references/${selectedId}/notes`).then(
+      (res) => {
+        if (cancelled) return;
+        const body = res.ok ? (res.data.note?.body ?? "") : "";
+        noteSaved.current = { refId: selectedId, body };
+        latestNote.current = body;
+        setNote(body);
+        setNoteStatus("idle");
+      },
+    );
+    return () => {
+      cancelled = true;
     };
-    setHighlights(data.items ?? []);
+  }, [selectedId, persistNote]);
+
+  // Automatisch opslaan, 800 ms na de laatste toetsaanslag.
+  useEffect(() => {
+    const { refId, body } = noteSaved.current;
+    if (!refId || note === body) return;
+    const t = setTimeout(() => void persistNote(refId, note), 800);
+    return () => clearTimeout(t);
+  }, [note, persistNote]);
+
+  // Bij sluiten van het tabblad de laatste wijziging nog meesturen.
+  useEffect(() => {
+    function flush() {
+      const { refId, body } = noteSaved.current;
+      if (!refId || latestNote.current === body) return;
+      navigator.sendBeacon(
+        `/api/references/${refId}/notes`,
+        new Blob([JSON.stringify({ body: latestNote.current })], { type: "application/json" }),
+      );
+    }
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+
+  const fetchHighlights = useCallback(async (attachmentId: string) => {
+    const res = await api<{ items?: Highlight[] }>(
+      `/api/highlights?attachmentId=${encodeURIComponent(attachmentId)}`,
+    );
+    return res.ok ? (res.data.items ?? []) : [];
   }, []);
 
   useEffect(() => {
-    if (selectedId) void loadNote(selectedId);
-    else setNote("");
-  }, [selectedId, loadNote]);
-
-  useEffect(() => {
-    setDoiEdit(selected?.doi ?? "");
-  }, [selected?.id, selected?.doi]);
-
-  useEffect(() => {
-    setTitleExpanded(false);
-    setMobileDetailTab("info");
-  }, [selected?.id]);
-
-  useEffect(() => {
-    if (selected?.attachmentId) void loadHighlights(selected.attachmentId);
-    else setHighlights([]);
-  }, [selected?.attachmentId, loadHighlights]);
+    const attachmentId = selected?.attachmentId;
+    if (!attachmentId) return;
+    let cancelled = false;
+    void fetchHighlights(attachmentId).then((list) => {
+      if (!cancelled) setHighlightState({ attachmentId, items: list });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.attachmentId, fetchHighlights]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -212,36 +309,36 @@ export function LibraryApp({ user }: Props) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [items, selected, paletteOpen]);
+  });
 
   async function copyCitation(id: string, style: string) {
+    const res = await api<{ citation?: string }>(`/api/cite/${id}?style=${style}`);
+    if (!res.ok || !res.data.citation) {
+      toast.error("Citaat ophalen mislukt", res.ok ? undefined : res.error);
+      return;
+    }
+    const citation = res.data.citation;
+
+    let copied = false;
     try {
-      const res = await fetch(`/api/cite/${id}?style=${style}`);
-      const data = (await res.json()) as { citation?: string; error?: string };
-      if (!res.ok || !data.citation) {
-        alert(data.error ?? "Citaat ophalen mislukt.");
-        return;
-      }
+      await navigator.clipboard.writeText(citation);
+      copied = true;
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = citation;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      copied = document.execCommand("copy");
+      ta.remove();
+    }
 
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(data.citation);
-        copied = true;
-      } catch {
-        const ta = document.createElement("textarea");
-        ta.value = data.citation;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        copied = document.execCommand("copy");
-        ta.remove();
-      }
-
+    try {
       if (!copied) {
         // Laatste redmiddel op iOS: share-sheet met het citaat
-        const result = await shareOrCopyText(data.citation, {
+        const result = await shareOrCopyText(citation, {
           title: `${style.toUpperCase()}-citaat`,
         });
         setCiteCopied(
@@ -254,7 +351,7 @@ export function LibraryApp({ user }: Props) {
       }
       window.setTimeout(() => setCiteCopied(null), 3500);
     } catch {
-      alert("Citaat kopiëren mislukt.");
+      toast.error("Citaat kopiëren mislukt");
     }
   }
 
@@ -265,13 +362,13 @@ export function LibraryApp({ user }: Props) {
       if (mode === "bibtex") {
         const bib = formatBibtex(selected);
         const result = await shareOrCopyText(bib, { title: selected.title });
-        if (result === "copied") alert("BibTeX gekopieerd.");
+        if (result === "copied") toast.success("BibTeX gekopieerd");
         return;
       }
       if (mode === "summary" || !selected.hasPdf) {
         const text = formatShareSummary(selected);
         const result = await shareOrCopyText(text, { title: selected.title });
-        if (result === "copied") alert("Artikelinfo gekopieerd.");
+        if (result === "copied") toast.success("Artikelinfo gekopieerd");
         return;
       }
       await shareOrDownloadPdf(`/api/references/${selected.id}/pdf`, {
@@ -279,68 +376,67 @@ export function LibraryApp({ user }: Props) {
         title: selected.title,
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Exporteren mislukt.");
+      toast.error("Exporteren mislukt", err instanceof Error ? err.message : undefined);
     } finally {
       setExporting(false);
     }
   }
 
   async function addHighlight() {
-    if (!selected?.attachmentId || !hlQuote.trim()) return;
-    await fetch("/api/highlights", {
+    const attachmentId = selected?.attachmentId;
+    if (!attachmentId || !hlQuote.trim()) return;
+    const res = await api("/api/highlights", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        attachmentId: selected.attachmentId,
+      body: {
+        attachmentId,
         page: Number(hlPage) || 1,
         quote: hlQuote.trim(),
         color: "yellow",
         rects: [{ x: 0, y: 0, w: 0, h: 0 }],
-      }),
+      },
     });
+    if (!res.ok) {
+      toast.error("Highlight niet opgeslagen", res.error);
+      return;
+    }
     setHlQuote("");
-    await loadHighlights(selected.attachmentId);
+    setHighlightState({ attachmentId, items: await fetchHighlights(attachmentId) });
   }
 
-  async function saveNote() {
-    if (!selectedId) return;
-    setNoteSaving(true);
-    await fetch(`/api/references/${selectedId}/notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: note }),
-    });
-    setNoteSaving(false);
+  function onNoteChange(value: string) {
+    latestNote.current = value;
+    setNote(value);
+  }
+
+  async function saveNoteNow() {
+    const { refId, body } = noteSaved.current;
+    if (refId && latestNote.current !== body) await persistNote(refId, latestNote.current);
   }
 
   async function importDoi(doi: string, save = true) {
     if (doiImportLock.current) return;
     doiImportLock.current = true;
     setDoiImporting(true);
-    try {
-      const res = await fetch("/api/doi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ doi, save }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        alert(err.error ?? "DOI mislukt");
-        return;
-      }
-      const data = (await res.json()) as { item?: ReferenceRecord };
-      await load();
-      if (data.item) {
-        setSelectedId(data.item.id);
-        setMobilePane("detail");
-      }
-      setPaletteOpen(false);
-    } catch {
-      alert("DOI ophalen mislukt — geen verbinding.");
-    } finally {
-      doiImportLock.current = false;
-      setDoiImporting(false);
+    const res = await api<{ item?: ReferenceRecord }>("/api/doi", {
+      method: "POST",
+      body: { doi, save },
+    });
+    doiImportLock.current = false;
+    setDoiImporting(false);
+    if (!res.ok) {
+      toast.error("DOI ophalen mislukt", res.error);
+      return;
     }
+    await load();
+    if (res.data.item) {
+      setSelectedId(res.data.item.id);
+      setMobilePane("detail");
+      toast.success(
+        "Artikel toegevoegd",
+        res.data.item.hasPdf ? "Er is een open PDF gevonden en gekoppeld." : undefined,
+      );
+    }
+    setPaletteOpen(false);
   }
 
   async function createManual() {
@@ -353,24 +449,25 @@ export function LibraryApp({ user }: Props) {
         const familyName = parts.pop() ?? "";
         return { givenName: parts.join(" "), familyName };
       });
-    const res = await fetch("/api/references", {
+    const res = await api<{ item: ReferenceRecord }>("/api/references", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: {
         title: form.title,
         year: form.year ? Number(form.year) : null,
         journal: form.journal || null,
         doi: form.doi || null,
         abstract: form.abstract || null,
         authors,
-      }),
+      },
     });
-    if (!res.ok) return;
-    const data = (await res.json()) as { item: ReferenceRecord };
+    if (!res.ok) {
+      toast.error("Artikel niet opgeslagen", res.error);
+      return;
+    }
     setForm(emptyForm);
     setFormOpen(false);
     await load();
-    setSelectedId(data.item.id);
+    setSelectedId(res.data.item.id);
     setMobilePane("detail");
   }
 
@@ -378,52 +475,41 @@ export function LibraryApp({ user }: Props) {
     if (!selectedId) return;
     const fd = new FormData();
     fd.set("file", file);
-    const res = await fetch(`/api/references/${selectedId}/pdf`, {
+    const res = await api<{ item?: ReferenceRecord }>(`/api/references/${selectedId}/pdf`, {
       method: "POST",
       body: fd,
     });
     if (!res.ok) {
-      const err = (await res.json()) as { error?: string };
-      alert(err.error ?? "Upload mislukt");
+      toast.error("Upload mislukt", res.error);
       return;
     }
-    await load();
+    if (res.data.item) replaceItem(res.data.item);
+    toast.success("PDF gekoppeld");
   }
 
   async function importPdfAsReference(file: File) {
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      alert("Alleen PDF-bestanden.");
+    if (!looksLikePdfFile(file)) {
+      toast.error("Alleen PDF-bestanden", file.name);
       return;
     }
     setPdfImporting(true);
     const fd = new FormData();
     fd.set("file", file);
-    try {
-      const res = await fetch("/api/references/from-pdf", {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      const data = (await res.json()) as {
-        error?: string;
-        item?: ReferenceRecord;
-        message?: string;
-      };
-      if (!res.ok) {
-        alert(data.error ?? "Import mislukt");
-        return;
-      }
-      await load();
-      if (data.item) {
-        setSelectedId(data.item.id);
-        setMobilePane("detail");
-      }
-      if (data.message) alert(data.message);
-    } catch {
-      alert("Import mislukt — geen verbinding.");
-    } finally {
-      setPdfImporting(false);
+    const res = await api<{ item?: ReferenceRecord; message?: string }>(
+      "/api/references/from-pdf",
+      { method: "POST", body: fd },
+    );
+    setPdfImporting(false);
+    if (!res.ok) {
+      toast.error("Import mislukt", `${file.name}: ${res.error}`);
+      return;
     }
+    await load();
+    if (res.data.item) {
+      setSelectedId(res.data.item.id);
+      setMobilePane("detail");
+    }
+    if (res.data.message) toast.success(res.data.message, file.name);
   }
 
   function onPdfDragEnter(e: React.DragEvent) {
@@ -450,11 +536,9 @@ export function LibraryApp({ user }: Props) {
     e.preventDefault();
     pdfDropDepth.current = 0;
     setPdfDropActive(false);
-    const files = [...e.dataTransfer.files].filter(
-      (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
-    );
+    const files = [...e.dataTransfer.files].filter(looksLikePdfFile);
     if (files.length === 0) {
-      alert("Sleep een PDF-bestand.");
+      toast.info("Sleep een PDF-bestand");
       return;
     }
     for (const file of files) {
@@ -465,113 +549,95 @@ export function LibraryApp({ user }: Props) {
   async function saveDoi() {
     if (!selectedId) return;
     setDoiSaving(true);
-    try {
-      const res = await fetch(`/api/references/${selectedId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ doi: doiEdit.trim() || null }),
-      });
-      const data = (await res.json()) as { error?: string; item?: ReferenceRecord };
-      if (!res.ok) {
-        alert(data.error ?? "DOI opslaan mislukt");
-        return;
-      }
-      if (data.item) setDoiEdit(data.item.doi ?? "");
-      await load();
-    } catch {
-      alert("DOI opslaan mislukt — geen verbinding.");
-    } finally {
-      setDoiSaving(false);
+    const res = await api<{ item?: ReferenceRecord }>(`/api/references/${selectedId}`, {
+      method: "PATCH",
+      body: { doi: doiEdit.trim() || null },
+    });
+    setDoiSaving(false);
+    if (!res.ok) {
+      toast.error("DOI opslaan mislukt", res.error);
+      return;
     }
+    if (res.data.item) {
+      setDoiEdit(res.data.item.doi ?? "");
+      replaceItem(res.data.item);
+    }
+    toast.success("DOI opgeslagen");
   }
 
   async function deleteSelectedReference() {
     if (!selectedId || !selected) return;
-    const ok = window.confirm(
-      `"${selected.title.slice(0, 80)}${selected.title.length > 80 ? "…" : ""}" verwijderen? PDF en notities gaan mee.`,
-    );
+    const ok = await toast.confirm({
+      title: "Artikel verwijderen?",
+      description: `"${selected.title.slice(0, 80)}${selected.title.length > 80 ? "…" : ""}" wordt verwijderd, samen met de PDF en notities.`,
+      confirmLabel: "Verwijderen",
+      danger: true,
+    });
     if (!ok) return;
     setDeletingRef(true);
-    try {
-      const res = await fetch(`/api/references/${selectedId}`, { method: "DELETE" });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        alert(data.error ?? "Verwijderen mislukt");
-        return;
-      }
-      setSelectedId(null);
-      setMobilePane("list");
-      await load();
-    } catch {
-      alert("Verwijderen mislukt — geen verbinding.");
-    } finally {
-      setDeletingRef(false);
+    const res = await api(`/api/references/${selectedId}`, { method: "DELETE" });
+    setDeletingRef(false);
+    if (!res.ok) {
+      toast.error("Verwijderen mislukt", res.error);
+      return;
     }
+    noteSaved.current = { refId: null, body: "" };
+    setItems((list) => list.filter((i) => i.id !== selectedId));
+    setSelectedId(null);
+    setMobilePane("list");
+    toast.success("Artikel verwijderd");
   }
 
   async function refreshMetadataFromDoi() {
     if (!selectedId) return;
     setRefreshingMeta(true);
-    try {
-      const payload = doiEdit.trim()
-        ? JSON.stringify({ doi: cleanDoiForLookup(doiEdit.trim()) })
-        : "{}";
-      const res = await fetch(
-        `/api/references/${selectedId}/refresh-metadata`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: payload,
-        },
-      );
-      let data: { error?: string; item?: ReferenceRecord } = {};
-      try {
-        data = (await res.json()) as { error?: string; item?: ReferenceRecord };
-      } catch {
-        alert(`Metadata ophalen mislukt (HTTP ${res.status}).`);
-        return;
-      }
-      if (res.status === 401) {
-        alert("Sessie verlopen — log opnieuw in.");
-        return;
-      }
-      if (!res.ok) {
-        alert(data.error ?? "Metadata ophalen mislukt");
-        return;
-      }
-      await load();
-      if (data.item) setSelectedId(data.item.id);
-    } catch {
-      alert("Metadata ophalen mislukt — geen verbinding.");
-    } finally {
-      setRefreshingMeta(false);
+    const res = await api<{ item?: ReferenceRecord }>(
+      `/api/references/${selectedId}/refresh-metadata`,
+      {
+        method: "POST",
+        body: doiEdit.trim() ? { doi: cleanDoiForLookup(doiEdit.trim()) } : {},
+      },
+    );
+    setRefreshingMeta(false);
+    if (!res.ok) {
+      toast.error("Metadata ophalen mislukt", res.error);
+      return;
     }
+    if (res.data.item) replaceItem(res.data.item);
+    toast.success("Metadata bijgewerkt");
+  }
+
+  /** Optimistisch bijwerken: direct tonen, bij een fout terugzetten. */
+  async function patchSelected(patch: Partial<Pick<ReferenceRecord, "starred" | "status">>) {
+    if (!selected) return;
+    const before = selected;
+    replaceItem({ ...selected, ...patch });
+    const res = await api<{ item?: ReferenceRecord }>(`/api/references/${selected.id}`, {
+      method: "PATCH",
+      body: patch,
+    });
+    if (!res.ok) {
+      replaceItem(before);
+      toast.error("Wijziging niet opgeslagen", res.error);
+      return;
+    }
+    if (res.data.item) replaceItem(res.data.item);
   }
 
   async function toggleStar() {
-    if (!selected) return;
-    await fetch(`/api/references/${selected.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ starred: !selected.starred }),
-    });
-    await load();
+    if (selected) await patchSelected({ starred: !selected.starred });
   }
 
   async function setStatus(status: RefStatus) {
-    if (!selected) return;
-    await fetch(`/api/references/${selected.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    await load();
+    await patchSelected({ status });
   }
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    await saveNoteNow();
+    await api("/api/auth/logout", { method: "POST" });
+    await clearOfflineCache();
+    router.replace("/login");
+    router.refresh();
   }
 
   const sidebar = (
@@ -1219,6 +1285,7 @@ export function LibraryApp({ user }: Props) {
 
                 <DetailSection title="Kruisverwijzingen">
                   <CitationPanel
+                    key={selected.id}
                     referenceId={selected.id}
                     doi={selected.doi}
                     onOpenInLibrary={(id) => {
@@ -1232,22 +1299,22 @@ export function LibraryApp({ user }: Props) {
                 <DetailSection title="Notities">
                   <textarea
                     value={note}
-                    onChange={(e) => setNote(e.target.value)}
+                    onChange={(e) => onNoteChange(e.target.value)}
+                    onBlur={() => void saveNoteNow()}
                     rows={6}
                     aria-label="Notities"
                     className="input w-full min-w-0 max-w-full rounded-lg px-3 py-2 text-sm leading-relaxed"
                     placeholder="Schrijf je notities in Markdown…"
                   />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      disabled={noteSaving}
-                      onClick={() => void saveNote()}
-                      className="btn-secondary rounded-md px-3 py-1.5 text-xs max-lg:min-h-10"
-                    >
-                      {noteSaving ? "Opslaan…" : "Notitie opslaan"}
-                    </button>
-                  </div>
+                  <p
+                    className={cn(
+                      "mt-1.5 text-right text-xs",
+                      noteStatus === "error" ? "text-[var(--danger)]" : "text-[var(--text-subtle)]",
+                    )}
+                    role="status"
+                  >
+                    {NOTE_STATUS_LABEL[noteStatus]}
+                  </p>
                 </DetailSection>
 
                 {selected.hasPdf && (
@@ -1661,6 +1728,13 @@ const STATUS_LABEL: Record<RefStatus, string> = {
   unread: "Ongelezen",
   reading: "Bezig",
   read: "Gelezen",
+};
+
+const NOTE_STATUS_LABEL: Record<NoteStatus, string> = {
+  idle: "Wordt automatisch opgeslagen",
+  saving: "Opslaan…",
+  saved: "Opgeslagen",
+  error: "Niet opgeslagen — probeer het opnieuw",
 };
 
 const STATUS_ICON: Record<FilterStatus, LucideIcon> = {

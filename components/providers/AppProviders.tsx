@@ -2,6 +2,7 @@
 
 import { ThemeProvider } from "next-themes";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
+import { ToastProvider } from "@/components/ui/Toaster";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -11,7 +12,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       enableSystem
       storageKey="referentie-theme"
     >
-      {children}
+      <ToastProvider>{children}</ToastProvider>
       <ServiceWorkerRegistrar />
     </ThemeProvider>
   );

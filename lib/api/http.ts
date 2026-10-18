@@ -20,3 +20,12 @@ export async function requireSession(
   }
   return session;
 }
+
+/** Leest de JSON-body; ongeldige JSON geeft `undefined` in plaats van een 500. */
+export async function readJson(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return undefined;
+  }
+}

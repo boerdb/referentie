@@ -5,10 +5,15 @@ import { findDoiInPdfBuffer } from "@/lib/pdf/extract-text";
 import {
   createReference,
   getReference,
+  deleteReference,
   getReferenceByDoi,
 } from "@/lib/references/queries";
 import type { ReferenceInput } from "@/lib/references/types";
-import { savePdfForReference } from "@/lib/uploads/pdf";
+import {
+  deletePdfFilesForReference,
+  looksLikePdfFile,
+  savePdfBufferForReference,
+} from "@/lib/uploads/pdf";
 import { jsonError, jsonOk, requireSession } from "@/lib/api/http";
 
 function titleFromFileName(name: string): string {
@@ -25,11 +30,15 @@ export async function POST(req: NextRequest) {
   if (!(file instanceof File)) {
     return jsonError("Bestand ontbreekt.", 400);
   }
-  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+  if (!looksLikePdfFile(file)) {
     return jsonError("Alleen PDF-bestanden.", 400);
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
+  // Controleer de inhoud vóór er een referentie wordt aangemaakt.
+  if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
+    return jsonError("Dit bestand is geen PDF.", 400);
+  }
   const data = new Uint8Array(buffer);
 
   let doi: string | null = null;
@@ -81,8 +90,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await savePdfForReference(session.userId, referenceId, file);
+    await savePdfBufferForReference(session.userId, referenceId, buffer, file.name);
   } catch (e) {
+    // Geen lege referentie achterlaten als de PDF niet kon worden opgeslagen.
+    if (importSource !== "existing") {
+      await deletePdfFilesForReference(session.userId, referenceId);
+      await deleteReference(session.userId, referenceId);
+    }
     const msg = e instanceof Error ? e.message : "PDF opslaan mislukt.";
     return jsonError(msg, 400);
   }
