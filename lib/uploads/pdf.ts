@@ -54,7 +54,7 @@ export async function referenceHasPdf(
 async function indexAttachment(attachmentId: string, buffer: Buffer): Promise<void> {
   try {
     const { text, pageCount } = await extractFullText(new Uint8Array(buffer));
-    await getPool().query("UPDATE attachments SET fulltext = ?, page_count = ? WHERE id = ?", [
+    await getPool().query("UPDATE attachments SET full_text = ?, page_count = ? WHERE id = ?", [
       text,
       pageCount,
       attachmentId,
@@ -220,7 +220,7 @@ export async function listAttachments(
 ): Promise<AttachmentInfo[]> {
   const [rows] = await getPool().query<AttRow[]>(
     `SELECT a.id, a.original_name, a.label, a.size_bytes, a.page_count, a.position, a.created_at,
-            a.fulltext IS NOT NULL AS indexed
+            a.full_text IS NOT NULL AS indexed
      FROM attachments a
      JOIN ref_items r ON r.id = a.reference_id
      WHERE a.reference_id = ? AND r.user_id = ?

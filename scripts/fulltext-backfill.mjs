@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Vult de doorzoekbare tekst (attachments.fulltext) aan voor PDF's die nog niet zijn geïndexeerd.
+ * Vult de doorzoekbare tekst (attachments.full_text) aan voor PDF's die nog niet zijn geïndexeerd.
  * Nieuwe uploads worden automatisch geïndexeerd; dit is voor bestaande bestanden.
  *
  *   npm run fulltext:backfill
@@ -79,7 +79,7 @@ async function extract(data) {
 const conn = await mysql.createConnection({ uri: url });
 try {
   const [rows] = await conn.query(
-    "SELECT id, storage_path, original_name FROM attachments WHERE fulltext IS NULL ORDER BY created_at",
+    "SELECT id, storage_path, original_name FROM attachments WHERE full_text IS NULL ORDER BY created_at",
   );
   console.log(`${rows.length} bijlage(n) zonder tekst.`);
   let done = 0;
@@ -89,7 +89,7 @@ try {
       const data = new Uint8Array(await readFile(path.join(uploadRoot(), row.storage_path)));
       const { text, pageCount } = await extract(data);
       // Lege tekst (gescande PDF) als "" opslaan, zodat hij niet steeds opnieuw wordt geprobeerd.
-      await conn.query("UPDATE attachments SET fulltext = ?, page_count = ? WHERE id = ?", [
+      await conn.query("UPDATE attachments SET full_text = ?, page_count = ? WHERE id = ?", [
         text,
         pageCount,
         row.id,

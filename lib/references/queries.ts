@@ -240,7 +240,7 @@ const AUTHOR_MATCH = `EXISTS (
 /** Zoekt in de geëxtraheerde tekst van de PDF's (FULLTEXT-index op attachments). */
 const FULLTEXT_MATCH = `EXISTS (
   SELECT 1 FROM attachments x
-  WHERE x.reference_id = r.id AND MATCH(x.fulltext) AGAINST (? IN NATURAL LANGUAGE MODE)
+  WHERE x.reference_id = r.id AND MATCH(x.full_text) AGAINST (? IN NATURAL LANGUAGE MODE)
 )`;
 
 export async function listReferences(
