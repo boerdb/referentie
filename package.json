@@ -7,15 +7,17 @@
     "build": "next build",
     "start": "next start -p 3023",
     "lint": "eslint",
-    "db:init": "node scripts/db-init.mjs",
+    "db:init": "node scripts/db-migrate.mjs",
     "studies:import": "node scripts/import-studies.mjs",
     "test:redis": "node scripts/test-redis.mjs",
     "deploy": "python scripts/deploy_remote.py",
     "deploy:setup": "python scripts/deploy_setup.py",
     "icons:generate": "node scripts/generate-icons.mjs",
-    "postinstall": "node scripts/copy-pdf-worker.mjs && node scripts/generate-icons.mjs"
+    "postinstall": "node scripts/copy-pdf-worker.mjs && node scripts/generate-icons.mjs",
+    "db:migrate": "node scripts/db-migrate.mjs"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.104.4",
     "bcryptjs": "^3.0.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",

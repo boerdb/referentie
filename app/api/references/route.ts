@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     status: searchParams.get("status") ?? undefined,
     starred: searchParams.get("starred") === "1",
     hasPdf: searchParams.get("hasPdf") === "1",
+    trash: searchParams.get("trash") === "1",
   });
   return jsonOk({ items });
 }

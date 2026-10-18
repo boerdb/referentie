@@ -1,3 +1,7 @@
+-- Volledig schema voor een nieuwe installatie (deploy_setup.py).
+-- Wijzigingen aan een bestaande database gaan via sql/migrations/ (npm run db:migrate);
+-- houd dit bestand gelijk met de laatste migratie.
+
 CREATE DATABASE IF NOT EXISTS referentie
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
@@ -30,12 +34,14 @@ CREATE TABLE IF NOT EXISTS ref_items (
   cite_key VARCHAR(128) NULL,
   status ENUM('unread', 'reading', 'read') NOT NULL DEFAULT 'unread',
   starred TINYINT(1) NOT NULL DEFAULT 0,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   INDEX idx_ref_user (user_id),
   INDEX idx_ref_user_status (user_id, status),
   INDEX idx_ref_user_starred (user_id, starred),
+  INDEX idx_ref_user_deleted (user_id, deleted_at),
   FULLTEXT idx_ref_search (title, abstract, journal)
 ) ENGINE=InnoDB;
 
@@ -43,6 +49,9 @@ CREATE TABLE IF NOT EXISTS authors (
   id CHAR(36) PRIMARY KEY,
   given_name VARCHAR(255) NOT NULL DEFAULT '',
   family_name VARCHAR(255) NOT NULL DEFAULT '',
+  name_key VARCHAR(511) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
+    AS (CONCAT(given_name, '|', family_name)) STORED,
+  UNIQUE KEY uq_author_name (name_key),
   INDEX idx_author_family (family_name)
 ) ENGINE=InnoDB;
 
@@ -50,10 +59,11 @@ CREATE TABLE IF NOT EXISTS reference_authors (
   reference_id CHAR(36) NOT NULL,
   author_id CHAR(36) NOT NULL,
   position INT NOT NULL,
-  PRIMARY KEY (reference_id, author_id),
+  PRIMARY KEY (reference_id, position),
   FOREIGN KEY (reference_id) REFERENCES ref_items(id) ON DELETE CASCADE,
   FOREIGN KEY (author_id) REFERENCES authors(id) ON DELETE CASCADE,
-  INDEX idx_ra_ref (reference_id)
+  INDEX idx_ra_ref (reference_id),
+  INDEX idx_ra_author (author_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS attachments (

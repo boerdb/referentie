@@ -454,14 +454,19 @@ async function insertReference(conn, userId, study, meta, doi) {
   );
   if (authors?.length) {
     for (let i = 0; i < authors.length; i++) {
-      const authorId = randomUUID();
+      // Auteurs zijn uniek op naam (authors.name_key); bestaande hergebruiken.
+      const givenName = (authors[i].givenName ?? "").trim().slice(0, 255);
+      const familyName = (authors[i].familyName ?? "").trim().slice(0, 255);
       await conn.query(
-        "INSERT INTO authors (id, given_name, family_name) VALUES (?, ?, ?)",
-        [authorId, authors[i].givenName.trim(), authors[i].familyName.trim()],
+        "INSERT IGNORE INTO authors (id, given_name, family_name) VALUES (?, ?, ?)",
+        [randomUUID(), givenName, familyName],
       );
+      const [rows] = await conn.query("SELECT id FROM authors WHERE name_key = ? LIMIT 1", [
+        `${givenName}|${familyName}`,
+      ]);
       await conn.query(
         "INSERT INTO reference_authors (reference_id, author_id, position) VALUES (?, ?, ?)",
-        [id, authorId, i],
+        [id, rows[0].id, i],
       );
     }
   }

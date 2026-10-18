@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import {
   deleteReference,
   getReference,
+  trashReference,
   updateReference,
 } from "@/lib/references/queries";
 import { parseReferenceInput } from "@/lib/references/validate";
@@ -40,12 +41,27 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   return jsonOk({ item });
 }
 
+/**
+ * Standaard naar de prullenbak. Met `?permanent=1` definitief, alleen voor iets dat al
+ * in de prullenbak staat.
+ */
 export async function DELETE(req: NextRequest, ctx: Ctx) {
   const session = await requireSession(req);
   if (session instanceof Response) return session;
   const { id } = await ctx.params;
+
+  if (req.nextUrl.searchParams.get("permanent") !== "1") {
+    const ok = await trashReference(session.userId, id);
+    if (!ok) return jsonError("Niet gevonden.", 404);
+    return jsonOk({ ok: true, trashed: true });
+  }
+
+  const existing = await getReference(session.userId, id);
+  if (!existing) return jsonError("Niet gevonden.", 404);
+  if (!existing.deletedAt) {
+    return jsonError("Zet het artikel eerst in de prullenbak.", 409);
+  }
   await deletePdfFilesForReference(session.userId, id);
-  const ok = await deleteReference(session.userId, id);
-  if (!ok) return jsonError("Niet gevonden.", 404);
-  return jsonOk({ ok: true });
+  await deleteReference(session.userId, id);
+  return jsonOk({ ok: true, trashed: false });
 }

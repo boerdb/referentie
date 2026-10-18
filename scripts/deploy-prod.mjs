@@ -130,7 +130,7 @@ UPLOAD_DIR=./data/pdfs
 
     await exec(
       conn,
-      `cd ${APP_DIR} && mkdir -p data/pdfs && npm ci && npm run build`,
+      `cd ${APP_DIR} && mkdir -p data/pdfs && npm ci && npm run db:migrate && npm run build`,
       "npm ci + build",
     );
 

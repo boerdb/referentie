@@ -48,6 +48,7 @@ fi
 mkdir -p "$APP_DIR/data/pdfs"
 install_studies_import_cron
 npm ci
+npm run db:migrate
 npm run build
 
 if ss -tlnH | grep -q ':3023 '; then

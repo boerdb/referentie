@@ -7,6 +7,7 @@ import {
   getReference,
   deleteReference,
   getReferenceByDoi,
+  restoreReference,
 } from "@/lib/references/queries";
 import type { ReferenceInput } from "@/lib/references/types";
 import {
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
     const normalized = cleanDoiForLookup(doi);
     const existing = await getReferenceByDoi(session.userId, normalized);
     if (existing) {
+      if (existing.deletedAt) await restoreReference(session.userId, existing.id);
       referenceId = existing.id;
       importSource = "existing";
     } else {

@@ -22,6 +22,8 @@ export type ReferenceRecord = {
   citeKey: string | null;
   status: RefStatus;
   starred: boolean;
+  /** Gezet als de referentie in de prullenbak staat. */
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
   authors: { givenName: string; familyName: string }[];
@@ -45,4 +47,14 @@ export type ReferenceInput = {
   status?: RefStatus;
   starred?: boolean;
   authors?: AuthorInput[];
+};
+
+export type ReferenceCounts = {
+  all: number;
+  unread: number;
+  reading: number;
+  read: number;
+  starred: number;
+  hasPdf: number;
+  trash: number;
 };

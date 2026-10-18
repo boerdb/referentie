@@ -22,3 +22,21 @@ export function getPool(): mysql.Pool {
 export function dbConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL?.trim());
 }
+
+/** Voert `fn` uit binnen één transactie; bij een fout wordt alles teruggedraaid. */
+export async function withTransaction<T>(
+  fn: (conn: mysql.PoolConnection) => Promise<T>,
+): Promise<T> {
+  const conn = await getPool().getConnection();
+  try {
+    await conn.beginTransaction();
+    const result = await fn(conn);
+    await conn.commit();
+    return result;
+  } catch (error) {
+    await conn.rollback().catch(() => {});
+    throw error;
+  } finally {
+    conn.release();
+  }
+}

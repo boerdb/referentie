@@ -16,10 +16,24 @@ python scripts/deploy_setup.py
 
 Dit script:
 
-- voert `sql/schema.sql` uit op MariaDB **192.168.1.14**
+- voert `sql/schema.sql` uit op MariaDB **192.168.1.14** (volledig schema voor een nieuwe installatie)
 - maakt user `referentie` (wachtwoord uit `REFERENTIE_DB_PASS` in `scripts/.secrets.local` of env; MySQL-root uit `MYSQL_ROOT_PASS`)
 - schrijft `/var/www/referentie/.env.local` op **.32**
 - clone + `scripts/deploy.sh` + PM2
+
+## Databasemigraties
+
+Wijzigingen aan het schema staan in `sql/migrations/NNN_naam.sql` en worden bij elke deploy
+uitgevoerd (`npm run db:migrate` in `scripts/deploy.sh`). Wat al is toegepast staat in de tabel
+`schema_migrations`.
+
+```bash
+npm run db:migrate -- --status   # tonen wat nog openstaat
+npm run db:migrate               # toepassen
+```
+
+DDL in MariaDB is niet terug te draaien: maak vóór een deploy met nieuwe migraties een back-up
+(`mysqldump referentie > referentie-$(date +%F).sql` op .14).
 
 ## Update (lokaal → server)
 
