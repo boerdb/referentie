@@ -28,6 +28,7 @@ const FIELD_LABEL: Record<SearchField, string> = {
   author: "Auteur",
   journal: "Tijdschrift",
   doi: "DOI",
+  fulltext: "PDF-tekst",
 };
 
 type Props = {

@@ -76,9 +76,13 @@ CREATE TABLE IF NOT EXISTS attachments (
   mime VARCHAR(128) NOT NULL DEFAULT 'application/pdf',
   size_bytes BIGINT NOT NULL DEFAULT 0,
   page_count INT NULL,
+  fulltext MEDIUMTEXT NULL,
+  position INT NOT NULL DEFAULT 0,
+  label VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (reference_id) REFERENCES ref_items(id) ON DELETE CASCADE,
-  INDEX idx_att_ref (reference_id)
+  INDEX idx_att_ref (reference_id),
+  FULLTEXT ft_att_text (fulltext)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS notes (

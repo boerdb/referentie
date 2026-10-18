@@ -28,6 +28,7 @@ type RefRow = RowDataPacket & {
   updated_at: Date;
   has_pdf: number;
   attachment_id: string | null;
+  attachment_count: number | null;
 };
 
 type AuthorRow = RowDataPacket & {
@@ -67,6 +68,7 @@ function mapRow(row: RefRow, authors: AuthorRow[], extras: Extras): ReferenceRec
     updatedAt: row.updated_at.toISOString(),
     hasPdf: Boolean(row.has_pdf),
     attachmentId: row.attachment_id ?? null,
+    attachmentCount: Number(row.attachment_count ?? 0),
     authors: authors
       .sort((a, b) => a.position - b.position)
       .map((a) => ({
@@ -130,13 +132,16 @@ async function mapRows(rows: RefRow[]): Promise<ReferenceRecord[]> {
   );
 }
 
-/** Referentie met de eerste bijlage, zonder gecorreleerde subqueries per rij. */
+/** Referentie met de hoofd-PDF (eerste op volgorde) en het aantal bijlagen. */
 const REF_SELECT = `SELECT r.*,
       att.attachment_id IS NOT NULL AS has_pdf,
-      att.attachment_id
+      att.attachment_id,
+      att.attachment_count
      FROM ref_items r
      LEFT JOIN (
-       SELECT reference_id, MIN(id) AS attachment_id
+       SELECT reference_id,
+         SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY position, created_at), ',', 1) AS attachment_id,
+         COUNT(*) AS attachment_count
        FROM attachments
        GROUP BY reference_id
      ) att ON att.reference_id = r.id`;
@@ -222,7 +227,7 @@ export type ListFilters = {
   ids?: string[];
 };
 
-export const SEARCH_FIELDS = ["all", "title", "author", "journal", "doi"] as const;
+export const SEARCH_FIELDS = ["all", "title", "author", "journal", "doi", "fulltext"] as const;
 export type SearchField = (typeof SEARCH_FIELDS)[number];
 
 const AUTHOR_MATCH = `EXISTS (
@@ -230,6 +235,12 @@ const AUTHOR_MATCH = `EXISTS (
   JOIN authors a ON a.id = ra.author_id
   WHERE ra.reference_id = r.id
     AND (a.family_name LIKE ? OR CONCAT(a.given_name, ' ', a.family_name) LIKE ?)
+)`;
+
+/** Zoekt in de geëxtraheerde tekst van de PDF's (FULLTEXT-index op attachments). */
+const FULLTEXT_MATCH = `EXISTS (
+  SELECT 1 FROM attachments x
+  WHERE x.reference_id = r.id AND MATCH(x.fulltext) AGAINST (? IN NATURAL LANGUAGE MODE)
 )`;
 
 export async function listReferences(
@@ -294,12 +305,16 @@ export async function listReferences(
         where.push("r.doi LIKE ?");
         params.push(like);
         break;
+      case "fulltext":
+        where.push(FULLTEXT_MATCH);
+        params.push(q);
+        break;
       default:
         where.push(
           `(MATCH(r.title, r.abstract, r.journal) AGAINST (? IN NATURAL LANGUAGE MODE)
-            OR r.title LIKE ? OR r.doi LIKE ? OR ${AUTHOR_MATCH})`,
+            OR r.title LIKE ? OR r.doi LIKE ? OR ${AUTHOR_MATCH} OR ${FULLTEXT_MATCH})`,
         );
-        params.push(q, like, like, like, like);
+        params.push(q, like, like, like, like, q);
     }
   }
 

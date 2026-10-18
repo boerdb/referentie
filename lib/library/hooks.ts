@@ -17,7 +17,7 @@ import type {
   TagRecord,
 } from "@/lib/references/types";
 
-export type SearchField = "all" | "title" | "author" | "journal" | "doi";
+export type SearchField = "all" | "title" | "author" | "journal" | "doi" | "fulltext";
 
 export type ListParams = {
   q: string;

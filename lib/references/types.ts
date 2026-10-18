@@ -33,7 +33,10 @@ export type ReferenceRecord = {
   /** Handmatige groepen waar het artikel in zit. */
   groupIds: string[];
   hasPdf: boolean;
+  /** Hoofd-PDF. */
   attachmentId: string | null;
+  /** Aantal bijlagen (hoofd-PDF plus supplementen). */
+  attachmentCount: number;
 };
 
 export type ReferenceInput = {

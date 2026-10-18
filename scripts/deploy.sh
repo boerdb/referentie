@@ -50,6 +50,8 @@ install_studies_import_cron
 npm ci
 npm run db:migrate
 npm run build
+# Doorzoekbare tekst aanvullen voor oudere PDF's; een fout hier stopt de deploy niet.
+npm run fulltext:backfill || echo "Waarschuwing: fulltext-backfill mislukt"
 
 if ss -tlnH | grep -q ':3023 '; then
   echo "Waarschuwing: poort 3023 is al bezet."
