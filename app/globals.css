@@ -255,6 +255,53 @@ body {
   background: transparent;
 }
 
+/* Opstartscherm: alleen in de geïnstalleerde app (zie components/pwa/SplashOverlay.tsx) */
+.pwa-splash {
+  display: none;
+}
+@media (display-mode: standalone) {
+  .pwa-splash {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    color: #fff;
+    transition:
+      opacity 450ms ease,
+      transform 450ms ease;
+  }
+}
+.pwa-splash-out {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+.pwa-splash-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  filter: drop-shadow(0 8px 24px rgba(11, 20, 80, 0.35));
+}
+.pwa-splash-title {
+  position: absolute;
+  inset-inline: 0;
+  text-align: center;
+  animation: splash-title 500ms 150ms ease-out both;
+}
+@keyframes splash-title {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pwa-splash,
+  .pwa-splash-title {
+    transition: none;
+    animation: none;
+  }
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

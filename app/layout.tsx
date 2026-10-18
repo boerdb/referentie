@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
 import { AppProviders } from "@/components/providers/AppProviders";
+import { SplashOverlay } from "@/components/pwa/SplashOverlay";
+import splashScreens from "@/lib/pwa/splash-screens.json";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -26,6 +28,8 @@ export const metadata: Metadata = {
     capable: true,
     title: "Referentie",
     statusBarStyle: "black-translucent",
+    // Opstartbeelden per iPhone/iPad (scripts/generate-splash.mjs).
+    startupImage: splashScreens.map(({ url, media }) => ({ url, media })),
   },
   formatDetection: {
     telephone: false,
@@ -59,6 +63,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} min-h-full antialiased`}
       >
+        <SplashOverlay />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

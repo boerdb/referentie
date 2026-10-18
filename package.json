@@ -16,7 +16,8 @@
     "postinstall": "node scripts/copy-pdf-worker.mjs && node scripts/generate-icons.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "fulltext:backfill": "node scripts/fulltext-backfill.mjs",
-    "retractions:check": "node scripts/retraction-check.mjs"
+    "retractions:check": "node scripts/retraction-check.mjs",
+    "splash:generate": "node scripts/generate-splash.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.4",
