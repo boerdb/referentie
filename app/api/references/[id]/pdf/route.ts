@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { getPdfForUser, savePdfForReference } from "@/lib/uploads/pdf";
 import { getReference } from "@/lib/references/queries";
 import { jsonError, requireSession } from "@/lib/api/http";
+import { contentDisposition, niceFileName } from "@/lib/uploads/file-name";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -14,12 +15,13 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   if (!pdf) return jsonError("Geen PDF voor dit artikel.", 404);
 
   const asDownload = req.nextUrl.searchParams.get("download") === "1";
-  const safeName = pdf.fileName.replace(/"/g, "");
+  const ref = await getReference(session.userId, id);
+  const name = ref ? niceFileName(ref) : pdf.fileName;
 
   return new Response(new Uint8Array(pdf.buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `${asDownload ? "attachment" : "inline"}; filename="${encodeURIComponent(safeName)}"`,
+      "Content-Disposition": contentDisposition(name, asDownload),
       "Cache-Control": "private, max-age=3600",
     },
   });
