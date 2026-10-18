@@ -10,10 +10,10 @@ import {
   Filter,
   Folder,
   FolderPlus,
+  Globe,
   LogOut,
   MoreHorizontal,
   Plus,
-  Search,
   Settings,
   Star,
   Tag,
@@ -28,6 +28,7 @@ import { ContextMenu } from "@/components/ui/ContextMenu";
 import { BrandMark } from "@/components/ui/BrandMark";
 import type { SessionPayload } from "@/lib/auth/session";
 import { usePref } from "@/lib/library/prefs";
+import { SEARCH_SOURCES, type SearchSource } from "@/lib/search/literature";
 import {
   LABELS,
   type GroupRecord,
@@ -48,6 +49,8 @@ export type LibraryView = {
   duplicates: boolean;
   /** Alleen artikelen met een retraction-melding. */
   retracted: boolean;
+  /** Online bron (PubMed e.d.) in plaats van de eigen bibliotheek. */
+  online: SearchSource | null;
 };
 
 export const DEFAULT_VIEW: LibraryView = {
@@ -60,6 +63,7 @@ export const DEFAULT_VIEW: LibraryView = {
   label: null,
   duplicates: false,
   retracted: false,
+  online: null,
 };
 
 /** Bron in de zijbalk; filters (favoriet, PDF) blijven daarbij staan. */
@@ -73,6 +77,7 @@ function source(view: LibraryView, patch: Partial<LibraryView>): LibraryView {
     label: null,
     duplicates: false,
     retracted: false,
+    online: null,
     ...patch,
   };
 }
@@ -115,7 +120,13 @@ export function Sidebar(props: Props) {
   const manual = groups.filter((g) => g.kind === "manual");
   const smart = groups.filter((g) => g.kind === "smart");
   const inLibrary =
-    !view.trash && !view.group && !view.tag && !view.label && !view.duplicates && !view.retracted;
+    !view.trash &&
+    !view.group &&
+    !view.tag &&
+    !view.label &&
+    !view.duplicates &&
+    !view.retracted &&
+    !view.online;
 
   function select(next: LibraryView) {
     onViewChange(next);
@@ -211,14 +222,23 @@ export function Sidebar(props: Props) {
           >
             Prullenbak
           </SourceItem>
-          <Link
-            href="/zoeken"
-            className="btn-ghost flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left max-lg:py-3"
-            onClick={onClose}
-          >
-            <Search className="h-4 w-4 shrink-0 text-[var(--text-subtle)]" />
-            Literatuur zoeken
-          </Link>
+        </Section>
+
+        <Section
+          title="Online zoeken"
+          collapsed={collapsed.includes("online")}
+          onToggle={() => toggleCollapsed("online")}
+        >
+          {SEARCH_SOURCES.map((s) => (
+            <SourceItem
+              key={s.id}
+              icon={Globe}
+              active={view.online === s.id}
+              onClick={() => select(source(view, { online: s.id, starred: false, hasPdf: false }))}
+            >
+              {s.label}
+            </SourceItem>
+          ))}
         </Section>
 
         <Section

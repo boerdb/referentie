@@ -49,6 +49,7 @@ import { groupOptions } from "./inspector/organize";
 import { useCitationCopy } from "./inspector/useCitationCopy";
 import { useExport } from "./inspector/useExport";
 import { PdfReader, type PdfFocus } from "./PdfReader";
+import { OnlineSearch } from "./OnlineSearch";
 import { ReferenceList } from "./ReferenceList";
 import {
   DEFAULT_COLUMNS,
@@ -158,6 +159,20 @@ export function LibraryApp({ user }: Props) {
   useEffect(() => {
     if (unauthorized) router.replace("/login");
   }, [unauthorized, router]);
+
+  const onlineSearch = view.online ? (
+    <OnlineSearch
+      source={view.online}
+      query={query}
+      onQueryChange={setQuery}
+      onOpenMenu={() => setMobileMenuOpen(true)}
+      onOpenInLibrary={(id) => {
+        changeView(DEFAULT_VIEW);
+        setQuery("");
+        select(id);
+      }}
+    />
+  ) : null;
 
   const listTitle = view.trash
     ? "Prullenbak"
@@ -946,12 +961,20 @@ export function LibraryApp({ user }: Props) {
           />
         </div>
 
-        {/* Telefoon: kaartenlijst */}
-        {cardList(cn("lg:hidden", mobilePane === "detail" ? "hidden" : "flex"))}
+        {/* Telefoon: kaartenlijst (of online zoeken) */}
+        {onlineSearch ? (
+          <div className={cn("min-w-0 flex-1 lg:hidden", mobilePane === "detail" ? "hidden" : "flex")}>
+            {onlineSearch}
+          </div>
+        ) : (
+          cardList(cn("lg:hidden", mobilePane === "detail" ? "hidden" : "flex"))
+        )}
 
         {/* Desktop: lijstkop + tabel, kaarten of PDF */}
         <div className="hidden min-w-0 flex-1 flex-col bg-[var(--bg-panel)] lg:flex">
-          {showPdf && primary ? (
+          {onlineSearch ? (
+            onlineSearch
+          ) : showPdf && primary ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--border)] px-4">
                 <p className="min-w-0 flex-1 truncate text-sm font-medium">{primary.title}</p>
@@ -1060,8 +1083,8 @@ export function LibraryApp({ user }: Props) {
         >
           <div className="flex min-h-0 flex-1 flex-col lg:w-[var(--inspector-w)]">
             <Inspector
-              reference={primary}
-              selection={multiSelection}
+              reference={view.online ? null : primary}
+              selection={view.online ? [] : multiSelection}
               duplicateSet={duplicateSet}
               currentGroupId={currentGroup?.kind === "manual" ? currentGroup.id : null}
               onMerged={(keepId) => select(keepId)}
