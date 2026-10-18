@@ -44,6 +44,7 @@ import { looksLikePdfFile } from "@/lib/uploads/is-pdf";
 import { cn } from "@/lib/utils";
 import { AddSheet, CommandPalette, DropOverlay, ReferenceForm } from "./dialogs";
 import { Inspector, type BulkRequest } from "./Inspector";
+import { useFindPdf } from "./inspector/FindPdf";
 import { groupOptions } from "./inspector/organize";
 import { useCitationCopy } from "./inspector/useCitationCopy";
 import { useExport } from "./inspector/useExport";
@@ -87,6 +88,7 @@ export function LibraryApp({ user }: Props) {
   const organize = useOrganize();
   const citation = useCitationCopy();
   const exporter = useExport();
+  const pdfFinder = useFindPdf();
 
   // Weergavevoorkeuren (per browser onthouden)
   const [listMode, setListMode] = usePref<ListMode>("listMode", "table");
@@ -521,7 +523,9 @@ export function LibraryApp({ user }: Props) {
     return [
       ...(single?.hasPdf
         ? [{ label: "PDF lezen", hint: "Spatie", onSelect: () => setPdfOpen(true) } as MenuEntry]
-        : []),
+        : single
+          ? [{ label: "PDF online zoeken", onSelect: () => void pdfFinder.findPdf(single) } as MenuEntry]
+          : []),
       single
         ? { label: `Citaat kopiëren (${styleLabel})`, hint: "C", onSelect: () => void citation.copyCitation(single.id) }
         : { label: `Bibliografie kopiëren (${styleLabel})`, onSelect: () => bulk({ kind: "bibliography" }) },

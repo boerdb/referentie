@@ -18,6 +18,7 @@ import {
   Upload,
 } from "lucide-react";
 import { ContextMenu } from "@/components/ui/ContextMenu";
+import { FindPdfPanel } from "./FindPdf";
 import { useToast } from "@/components/ui/Toaster";
 import { api } from "@/lib/api/client";
 import { cleanDoiForLookup } from "@/lib/doi/normalize";
@@ -426,7 +427,7 @@ export function AttachmentSection({
         }}
       />
       {!reference.hasPdf ? (
-        <p className="text-sm text-[var(--text-muted)]">Nog geen PDF gekoppeld.</p>
+        <FindPdfPanel reference={reference} onUpload={onReplace} />
       ) : isPending ? (
         <p className="text-sm text-[var(--text-muted)]">Laden…</p>
       ) : (
@@ -465,14 +466,14 @@ export function AttachmentSection({
           ))}
         </ul>
       )}
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className={cn("mt-3 flex flex-wrap gap-2", !reference.hasPdf && "hidden")}>
         <button
           type="button"
           className="btn-secondary inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs max-lg:min-h-10"
           onClick={onReplace}
         >
           <Upload className="h-3.5 w-3.5" />
-          {reference.hasPdf ? "Hoofd-PDF vervangen" : "PDF uploaden"}
+          Hoofd-PDF vervangen
         </button>
         {reference.hasPdf && (
           <button
