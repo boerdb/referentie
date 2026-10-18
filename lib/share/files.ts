@@ -96,8 +96,43 @@ export async function shareOrCopyText(
       // Fall through to clipboard.
     }
   }
-  await navigator.clipboard.writeText(text);
+  if (!(await copyRichText(escapeHtml(text).replace(/\n/g, "<br>"), text))) {
+    throw new Error("Kopiëren naar het klembord is niet gelukt.");
+  }
   return "copied";
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+}
+
+/**
+ * Terugval zonder klembord-API (gewone http:// op het LAN is geen "secure context"):
+ * de tekst opgemaakt in een verborgen element zetten, selecteren en "kopiëren".
+ */
+function copyWithSelection(html: string): boolean {
+  const el = document.createElement("div");
+  el.contentEditable = "true";
+  el.innerHTML = html;
+  el.style.position = "fixed";
+  el.style.left = "-9999px";
+  el.style.top = "0";
+  el.style.whiteSpace = "pre-wrap";
+  document.body.appendChild(el);
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  selection?.removeAllRanges();
+  el.remove();
+  return ok;
 }
 
 /** Een willekeurig bestand (bijv. .ris of .bib) delen op de telefoon of downloaden. */
@@ -139,9 +174,12 @@ export async function copyRichText(html: string, text: string): Promise<boolean>
     /* sommige browsers staan alleen platte tekst toe */
   }
   try {
-    await navigator.clipboard.writeText(text);
-    return true;
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
   } catch {
-    return false;
+    /* geen toegang tot het klembord */
   }
+  return copyWithSelection(html);
 }
