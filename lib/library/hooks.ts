@@ -33,7 +33,28 @@ export type ListParams = {
   duplicates: boolean;
 };
 
-export type Highlight = { id: string; page: number; quote: string | null; color: string };
+/** Rechthoek als fractie van de pagina (0–1), zodat hij bij elk zoomniveau klopt. */
+export type HighlightRect = { x: number; y: number; w: number; h: number };
+
+export type Highlight = {
+  id: string;
+  page: number;
+  quote: string | null;
+  color: string;
+  rects: HighlightRect[];
+  note: string | null;
+};
+
+export type Attachment = {
+  id: string;
+  name: string;
+  label: string | null;
+  sizeBytes: number;
+  pageCount: number | null;
+  position: number;
+  createdAt: string;
+  indexed: boolean;
+};
 
 export const libraryKeys = {
   references: ["references"] as const,
@@ -44,6 +65,7 @@ export const libraryKeys = {
   tags: ["references", "tags"] as const,
   duplicates: ["references", "duplicates"] as const,
   highlights: (attachmentId: string) => ["highlights", attachmentId] as const,
+  attachments: (referenceId: string) => ["references", "attachments", referenceId] as const,
 };
 
 /** Fout uit de API, met HTTP-status (0 = geen verbinding). */
@@ -224,16 +246,86 @@ export function useEmptyTrash() {
 export function useAddHighlight() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { attachmentId: string; page: number; quote: string }) =>
+    mutationFn: (input: {
+      attachmentId: string;
+      page: number;
+      quote: string;
+      rects?: HighlightRect[];
+      color?: string;
+    }) =>
       unwrap(
-        api("/api/highlights", {
+        api<{ id: string }>("/api/highlights", {
           method: "POST",
-          body: { ...input, color: "yellow", rects: [{ x: 0, y: 0, w: 0, h: 0 }] },
+          body: { color: "yellow", rects: [{ x: 0, y: 0, w: 0, h: 0 }], ...input },
         }),
       ),
     onSuccess: (_data, { attachmentId }) =>
       client.invalidateQueries({ queryKey: libraryKeys.highlights(attachmentId) }),
   });
+}
+
+export function useHighlightActions(attachmentId: string | null) {
+  const client = useQueryClient();
+  const settle = () =>
+    attachmentId && client.invalidateQueries({ queryKey: libraryKeys.highlights(attachmentId) });
+  const remove = useMutation({
+    mutationFn: (id: string) => unwrap(api(`/api/highlights/${id}`, { method: "DELETE" })),
+    onMutate: async (id) => {
+      if (!attachmentId) return;
+      // Direct uit beeld halen.
+      client.setQueryData<Highlight[]>(libraryKeys.highlights(attachmentId), (list) =>
+        list?.filter((h) => h.id !== id),
+      );
+    },
+    onSettled: settle,
+  });
+  const recolor = useMutation({
+    mutationFn: ({ id, color }: { id: string; color: string }) =>
+      unwrap(api(`/api/highlights/${id}`, { method: "PATCH", body: { color } })),
+    onSettled: settle,
+  });
+  return { remove, recolor };
+}
+
+export function useAttachments(referenceId: string | null) {
+  return useQuery({
+    queryKey: libraryKeys.attachments(referenceId ?? ""),
+    queryFn: () =>
+      unwrap(api<{ items: Attachment[] }>(`/api/references/${referenceId}/attachments`)).then(
+        (d) => d.items,
+      ),
+    enabled: Boolean(referenceId),
+  });
+}
+
+/** Bijlagen toevoegen, hernoemen, als hoofd-PDF instellen en verwijderen. */
+export function useAttachmentActions(referenceId: string) {
+  const client = useQueryClient();
+  const settle = () => client.invalidateQueries({ queryKey: libraryKeys.references });
+  const add = useMutation({
+    mutationFn: ({ file, label }: { file: File; label?: string }) => {
+      const fd = new FormData();
+      fd.set("file", file);
+      if (label) fd.set("label", label);
+      return unwrap(
+        api<{ attachmentId: string }>(`/api/references/${referenceId}/attachments`, {
+          method: "POST",
+          body: fd,
+        }),
+      );
+    },
+    onSettled: settle,
+  });
+  const update = useMutation({
+    mutationFn: ({ id, ...input }: { id: string; label?: string | null; makePrimary?: boolean }) =>
+      unwrap(api(`/api/attachments/${id}`, { method: "PATCH", body: input })),
+    onSettled: settle,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => unwrap(api(`/api/attachments/${id}`, { method: "DELETE" })),
+    onSettled: settle,
+  });
+  return { add, update, remove };
 }
 
 export type BulkAction =

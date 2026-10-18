@@ -1,17 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Braces, Check, Copy, ExternalLink, FileText, Plus, RefreshCw, Share2, Upload } from "lucide-react";
+import {
+  Braces,
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  FileText,
+  MoreHorizontal,
+  NotebookPen,
+  Plus,
+  RefreshCw,
+  Share2,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { ContextMenu } from "@/components/ui/ContextMenu";
 import { useToast } from "@/components/ui/Toaster";
 import { api } from "@/lib/api/client";
 import { cleanDoiForLookup } from "@/lib/doi/normalize";
 import {
-  useAddHighlight,
+  useAttachmentActions,
+  useAttachments,
+  useHighlightActions,
   useHighlights,
   usePatchReference,
   useReplaceReference,
 } from "@/lib/library/hooks";
+import { HIGHLIGHT_COLORS, type HighlightColor } from "../PdfViewer";
 import type { ReferenceRecord } from "@/lib/references/types";
 import { cn } from "@/lib/utils";
 import { DetailSection } from "../shared";
@@ -252,97 +270,264 @@ export function AbstractSection({ abstract }: { abstract: string | null }) {
   );
 }
 
-export function HighlightsSection({ attachmentId }: { attachmentId: string }) {
+/** Markeringen van de getoonde bijlage; klik springt naar de pagina in de PDF. */
+export function HighlightsSection({
+  referenceId,
+  attachmentId,
+  onJump,
+}: {
+  referenceId: string;
+  attachmentId: string;
+  onJump: (attachmentId: string, page: number) => void;
+}) {
   const toast = useToast();
   const { data: highlights = [] } = useHighlights(attachmentId);
-  const addHighlight = useAddHighlight();
-  const [page, setPage] = useState("1");
-  const [quote, setQuote] = useState("");
+  const { remove } = useHighlightActions(attachmentId);
+  const sorted = [...highlights].sort((a, b) => a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0));
 
-  async function add() {
-    if (!quote.trim()) return;
-    try {
-      await addHighlight.mutateAsync({ attachmentId, page: Number(page) || 1, quote: quote.trim() });
-      setQuote("");
-    } catch (error) {
-      toast.error("Highlight niet opgeslagen", error instanceof Error ? error.message : undefined);
+  /** Alle markeringen als citaten onder de notitie zetten. */
+  async function toNotes() {
+    const current = await api<{ note?: { body: string } | null }>(`/api/references/${referenceId}/notes`);
+    if (!current.ok) {
+      toast.error("Notitie ophalen mislukt", current.error);
+      return;
     }
+    const quotes = sorted
+      .filter((h) => h.quote?.trim())
+      .map((h) => `> ${h.quote!.trim()} (p. ${h.page})`)
+      .join("\n\n");
+    const before = current.data.note?.body?.trim() ?? "";
+    const body = [before, `### Markeringen\n\n${quotes}`].filter(Boolean).join("\n\n");
+    const res = await api(`/api/references/${referenceId}/notes`, { method: "POST", body: { body } });
+    if (!res.ok) toast.error("Notitie niet opgeslagen", res.error);
+    else toast.success(`${sorted.length} markeringen naar de notities gezet`);
   }
 
   return (
-    <DetailSection title="Highlights">
-      <div className="flex min-w-0 gap-2">
-        <input
-          className="input w-16 shrink-0 rounded-lg px-2 py-1.5 text-center text-sm tabular-nums"
-          value={page}
-          onChange={(e) => setPage(e.target.value)}
-          placeholder="Pag."
-          aria-label="Pagina"
-        />
-        <input
-          className="input min-w-0 flex-1 rounded-lg px-3 py-1.5 text-sm"
-          value={quote}
-          onChange={(e) => setQuote(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void add();
-          }}
-          placeholder="Geciteerde tekst…"
-          aria-label="Geciteerde tekst"
-        />
-        <button
-          type="button"
-          className="btn-secondary grid w-9 shrink-0 place-items-center rounded-lg"
-          aria-label="Highlight toevoegen"
-          disabled={!quote.trim() || addHighlight.isPending}
-          onClick={() => void add()}
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-      </div>
-      {highlights.length > 0 && (
-        <ul className="mt-3 space-y-2">
-          {highlights.map((h) => (
-            <li
-              key={h.id}
-              className="rounded-r-md border-l-2 border-[var(--star)] bg-[var(--bg-subtle)] py-1.5 pr-3 pl-3 text-sm break-words"
-            >
-              <span className="mr-2 text-xs font-medium text-[var(--text-subtle)] tabular-nums">
-                p. {h.page}
-              </span>
-              {h.quote}
-            </li>
-          ))}
-        </ul>
+    <DetailSection title="Markeringen">
+      {sorted.length === 0 ? (
+        <p className="text-sm text-[var(--text-muted)]">
+          Selecteer tekst in de PDF en kies een kleur om te markeren.
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-1.5">
+            {sorted.map((h) => (
+              <li key={h.id} className="group flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => onJump(attachmentId, h.page)}
+                  className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[var(--bg-hover)]"
+                  title="Naar deze plek in de PDF"
+                >
+                  <span
+                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: HIGHLIGHT_COLORS[(h.color as HighlightColor) in HIGHLIGHT_COLORS ? (h.color as HighlightColor) : "yellow"].dot }}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 break-words">
+                    <span className="mr-1.5 text-xs font-medium text-[var(--text-subtle)] tabular-nums">p. {h.page}</span>
+                    {h.quote || <em className="text-[var(--text-subtle)]">(zonder tekst)</em>}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Markering verwijderen"
+                  onClick={() => remove.mutate(h.id)}
+                  className="btn-ghost btn-danger mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md lg:opacity-0 lg:group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => void toNotes()}
+            className="btn-secondary mt-3 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs max-lg:min-h-10"
+          >
+            <NotebookPen className="h-3.5 w-3.5" /> Naar notities
+          </button>
+        </>
       )}
     </DetailSection>
   );
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} kB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Alle bijlagen van een artikel: hoofd-PDF en supplementen. */
 export function AttachmentSection({
-  hasPdf,
-  onUpload,
+  reference,
+  onReplace,
+  onOpen,
 }: {
-  hasPdf: boolean;
-  onUpload: () => void;
+  reference: ReferenceRecord;
+  onReplace: () => void;
+  onOpen: (attachmentId: string) => void;
 }) {
+  const toast = useToast();
+  const { data: attachments = [], isPending } = useAttachments(reference.hasPdf ? reference.id : null);
+  const actions = useAttachmentActions(reference.id);
+  const addRef = useRef<HTMLInputElement>(null);
+
+  async function addFile(file: File) {
+    const label = await toast.prompt({
+      title: "Bijlage toevoegen",
+      label: "Omschrijving (optioneel)",
+      placeholder: "Bijv. Supplement, Protocol, Editorial",
+      initial: file.name.replace(/\.pdf$/i, ""),
+      confirmLabel: "Toevoegen",
+    });
+    if (label === null) return;
+    actions.add.mutate(
+      { file, label },
+      {
+        onError: (error) => toast.error("Toevoegen mislukt", error.message),
+        onSuccess: () => toast.success("Bijlage toegevoegd", "De tekst wordt doorzoekbaar gemaakt."),
+      },
+    );
+  }
+
+  async function rename(id: string, current: string | null) {
+    const label = await toast.prompt({ title: "Omschrijving", label: "Omschrijving", initial: current ?? "" });
+    if (label === null) return;
+    actions.update.mutate({ id, label }, { onError: (error) => toast.error("Opslaan mislukt", error.message) });
+  }
+
+  async function remove(id: string, name: string) {
+    const ok = await toast.confirm({
+      title: "Bijlage verwijderen?",
+      description: `"${name}" en de markeringen erin worden verwijderd.`,
+      confirmLabel: "Verwijderen",
+      danger: true,
+    });
+    if (!ok) return;
+    actions.remove.mutate(id, {
+      onError: (error) => toast.error("Verwijderen mislukt", error.message),
+      onSuccess: () => toast.success("Bijlage verwijderd"),
+    });
+  }
+
   return (
-    <DetailSection title="Bijlage">
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--bg-subtle)] text-[var(--text-muted)]">
-          <FileText className="h-4 w-4" />
-        </span>
-        <p className="min-w-0 flex-1 text-sm text-[var(--text-muted)]">
-          {hasPdf ? "PDF gekoppeld" : "Nog geen PDF gekoppeld"}
-        </p>
+    <DetailSection title="Bijlagen">
+      <input
+        ref={addRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) void addFile(f);
+        }}
+      />
+      {!reference.hasPdf ? (
+        <p className="text-sm text-[var(--text-muted)]">Nog geen PDF gekoppeld.</p>
+      ) : isPending ? (
+        <p className="text-sm text-[var(--text-muted)]">Laden…</p>
+      ) : (
+        <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+          {attachments.map((a, index) => (
+            <li key={a.id} className="flex items-center gap-3 px-3 py-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[var(--bg-subtle)] text-[var(--text-muted)]">
+                <FileText className="h-4 w-4" />
+              </span>
+              <button type="button" onClick={() => onOpen(a.id)} className="min-w-0 flex-1 text-left" title="Openen">
+                <p className="truncate text-sm font-medium">
+                  {index === 0 ? "Hoofd-PDF" : a.label || a.name}
+                  {index === 0 && a.label ? ` · ${a.label}` : ""}
+                </p>
+                <p className="truncate text-xs text-[var(--text-muted)]">
+                  {[a.pageCount && `${a.pageCount} p.`, formatSize(a.sizeBytes), a.indexed ? "doorzoekbaar" : "tekst wordt verwerkt…"]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </button>
+              <a
+                href={`/api/attachments/${a.id}?download=1`}
+                className="btn-ghost grid h-8 w-8 shrink-0 place-items-center rounded-md"
+                title="Downloaden"
+                aria-label="Downloaden"
+              >
+                <Download className="h-4 w-4" />
+              </a>
+              <AttachmentMenu
+                primary={index === 0}
+                onRename={() => void rename(a.id, a.label)}
+                onMakePrimary={() => actions.update.mutate({ id: a.id, makePrimary: true })}
+                onRemove={() => void remove(a.id, index === 0 ? "Hoofd-PDF" : a.label || a.name)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
           className="btn-secondary inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs max-lg:min-h-10"
-          onClick={onUpload}
+          onClick={onReplace}
         >
           <Upload className="h-3.5 w-3.5" />
-          {hasPdf ? "PDF vervangen" : "PDF uploaden"}
+          {reference.hasPdf ? "Hoofd-PDF vervangen" : "PDF uploaden"}
         </button>
+        {reference.hasPdf && (
+          <button
+            type="button"
+            disabled={actions.add.isPending}
+            className="btn-secondary inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs max-lg:min-h-10"
+            onClick={() => addRef.current?.click()}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {actions.add.isPending ? "Toevoegen…" : "Bijlage toevoegen"}
+          </button>
+        )}
       </div>
     </DetailSection>
   );
+}
+
+function AttachmentMenu({
+  primary,
+  onRename,
+  onMakePrimary,
+  onRemove,
+}: {
+  primary: boolean;
+  onRename: () => void;
+  onMakePrimary: () => void;
+  onRemove: () => void;
+}) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Opties"
+        className="btn-ghost grid h-8 w-8 shrink-0 place-items-center rounded-md"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAt({ x: r.left - 160, y: r.bottom + 4 });
+        }}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {at && (
+        <ContextMenu
+          x={at.x}
+          y={at.y}
+          onClose={() => setAt(null)}
+          entries={[
+            { label: "Omschrijving wijzigen", onSelect: onRename },
+            { label: "Als hoofd-PDF instellen", onSelect: onMakePrimary, disabled: primary },
+            { kind: "separator" },
+            { label: "Bijlage verwijderen", onSelect: onRemove, danger: true },
+          ]}
+        />
+      )}
+    </>
+  )
 }

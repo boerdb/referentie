@@ -21,7 +21,7 @@ import { usePref } from "@/lib/library/prefs";
 import type { ReferenceRecord, RefStatus } from "@/lib/references/types";
 import { cn } from "@/lib/utils";
 import { CitationPanel } from "./CitationPanel";
-import { PdfViewer } from "./PdfViewer";
+import { PdfReader, type PdfFocus } from "./PdfReader";
 import { NotesSection } from "./inspector/NotesSection";
 import { BulkOrganize, DuplicatesPanel, OrganizeSection } from "./inspector/organize";
 import {
@@ -33,7 +33,7 @@ import {
 } from "./inspector/sections";
 import type { useCitationCopy } from "./inspector/useCitationCopy";
 import type { useExport } from "./inspector/useExport";
-import { DetailSection, IconButton, STATUSES, STATUS_LABEL, StatusSegments, authorList } from "./shared";
+import { DetailSection, IconButton, isDesktop, STATUSES, STATUS_LABEL, StatusSegments, authorList } from "./shared";
 
 type Tab = "info" | "abstract" | "notes" | "files" | "links" | "pdf";
 
@@ -65,6 +65,8 @@ type Props = {
   onRestore: (reference: ReferenceRecord) => void;
   onPurge: (reference: ReferenceRecord) => void;
   onTogglePdf: () => void;
+  /** PDF (of een bijlage) openen, eventueel op een pagina. */
+  onOpenPdf: (attachmentId: string | null, page?: number) => void;
   onBulk: (action: BulkRequest) => void;
   /** Gedeeld met LibraryApp, zodat sneltoets en palet dezelfde melding geven. */
   citation: ReturnType<typeof useCitationCopy>;
@@ -127,6 +129,7 @@ function ReferenceDetail({
   onRestore,
   onPurge,
   onTogglePdf,
+  onOpenPdf,
   citation,
   exporter,
 }: Props & { reference: ReferenceRecord }) {
@@ -139,6 +142,17 @@ function ReferenceDetail({
   const [savedTab, setSavedTab] = usePref<Tab>("inspectorTab", "info");
   // De PDF-tab bestaat alleen op de telefoon; op desktop opent de PDF naast de inspector.
   const [mobilePdf, setMobilePdf] = useState(false);
+  const [mobileFocus, setMobileFocus] = useState<PdfFocus>(null);
+
+  /** Op desktop naast de inspector; op de telefoon in de PDF-tab. */
+  function openPdf(attachmentId: string | null, page?: number) {
+    if (isDesktop()) {
+      onOpenPdf(attachmentId, page);
+    } else {
+      setMobileFocus({ attachmentId, page: page ?? 1, nonce: Date.now() });
+      setMobilePdf(true);
+    }
+  }
   const [titleExpanded, setTitleExpanded] = useState(false);
   const inTrash = reference.deletedAt !== null;
   const tab: Tab = mobilePdf ? "pdf" : savedTab === "pdf" ? "info" : savedTab;
@@ -343,7 +357,7 @@ function ReferenceDetail({
 
       {tab === "pdf" ? (
         <div className="flex min-h-0 flex-1 flex-col p-2 lg:hidden">
-          <PdfViewer url={`/api/references/${reference.id}/pdf`} title={reference.title} />
+          <PdfReader reference={reference} focus={mobileFocus} />
         </div>
       ) : (
         <div
@@ -368,8 +382,18 @@ function ReferenceDetail({
           {tab === "notes" && <NotesSection referenceId={reference.id} />}
           {tab === "files" && (
             <div className="divide-y divide-[var(--border)]">
-              <AttachmentSection hasPdf={reference.hasPdf} onUpload={() => fileRef.current?.click()} />
-              {reference.attachmentId && <HighlightsSection attachmentId={reference.attachmentId} />}
+              <AttachmentSection
+                reference={reference}
+                onReplace={() => fileRef.current?.click()}
+                onOpen={(attachmentId) => openPdf(attachmentId)}
+              />
+              {reference.attachmentId && (
+                <HighlightsSection
+                  referenceId={reference.id}
+                  attachmentId={reference.attachmentId}
+                  onJump={(attachmentId, page) => openPdf(attachmentId, page)}
+                />
+              )}
             </div>
           )}
           {tab === "links" && (

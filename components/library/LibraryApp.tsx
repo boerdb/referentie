@@ -47,7 +47,7 @@ import { Inspector, type BulkRequest } from "./Inspector";
 import { groupOptions } from "./inspector/organize";
 import { useCitationCopy } from "./inspector/useCitationCopy";
 import { useExport } from "./inspector/useExport";
-import { PdfViewer } from "./PdfViewer";
+import { PdfReader, type PdfFocus } from "./PdfReader";
 import { ReferenceList } from "./ReferenceList";
 import {
   DEFAULT_COLUMNS,
@@ -104,6 +104,8 @@ export function LibraryApp({ user }: Props) {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [pdfOpen, setPdfOpen] = useState(false);
+  /** Bijlage en pagina voor de PDF-weergave, per artikel. */
+  const [pdfFocus, setPdfFocus] = useState<{ referenceId: string; focus: PdfFocus } | null>(null);
   const [draftInspectorWidth, setDraftInspectorWidth] = useState<number | null>(null);
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -950,7 +952,11 @@ export function LibraryApp({ user }: Props) {
                 </button>
               </div>
               <div className="flex min-h-0 flex-1 flex-col p-3">
-                <PdfViewer key={primary.id} url={`/api/references/${primary.id}/pdf`} title={primary.title} />
+                <PdfReader
+                  key={primary.id}
+                  reference={primary}
+                  focus={pdfFocus?.referenceId === primary.id ? pdfFocus.focus : null}
+                />
               </div>
             </div>
           ) : (
@@ -1053,6 +1059,11 @@ export function LibraryApp({ user }: Props) {
               onRestore={(reference) => restoreReference(reference)}
               onPurge={(reference) => void purgeReference(reference)}
               onTogglePdf={() => setPdfOpen(!showPdf)}
+              onOpenPdf={(attachmentId, page) => {
+                if (!primary) return;
+                setPdfFocus({ referenceId: primary.id, focus: { attachmentId, page: page ?? 1, nonce: Date.now() } });
+                setPdfOpen(true);
+              }}
               onBulk={(request) => void runBulk(request)}
               citation={citation}
               exporter={exporter}
