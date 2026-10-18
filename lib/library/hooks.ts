@@ -10,8 +10,11 @@ import {
 import { api, type ApiResult } from "@/lib/api/client";
 import type { ReferenceCounts, ReferenceRecord, RefStatus } from "@/lib/references/types";
 
+export type SearchField = "all" | "title" | "author" | "journal" | "doi";
+
 export type ListParams = {
   q: string;
+  field: SearchField;
   status: RefStatus | "all";
   starred: boolean;
   hasPdf: boolean;
@@ -47,6 +50,7 @@ async function unwrap<T>(result: Promise<ApiResult<T>>): Promise<T> {
 function listUrl(params: ListParams): string {
   const search = new URLSearchParams();
   if (params.q.trim()) search.set("q", params.q.trim());
+  if (params.q.trim() && params.field !== "all") search.set("in", params.field);
   if (params.status !== "all") search.set("status", params.status);
   if (params.starred) search.set("starred", "1");
   if (params.hasPdf) search.set("hasPdf", "1");
@@ -210,5 +214,34 @@ export function useAddHighlight() {
       ),
     onSuccess: (_data, { attachmentId }) =>
       client.invalidateQueries({ queryKey: libraryKeys.highlights(attachmentId) }),
+  });
+}
+
+export type BulkAction =
+  | { action: "update"; patch: Partial<Pick<ReferenceRecord, "starred" | "status">> }
+  | { action: "trash" }
+  | { action: "restore" }
+  | { action: "purge" };
+
+/** Eén actie op een selectie. Verwijderen en terugzetten halen de artikelen direct uit de lijst. */
+export function useBulkAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, ...rest }: BulkAction & { ids: string[] }) =>
+      unwrap(
+        api<{ done: number }>("/api/references/bulk", { method: "POST", body: { ids, ...rest } }),
+      ).then((d) => d.done),
+    onMutate: async (vars) => {
+      await client.cancelQueries({ queryKey: libraryKeys.lists });
+      const ids = new Set(vars.ids);
+      if (vars.action === "update") {
+        return updateLists(client, (list) =>
+          list.map((i) => (ids.has(i.id) ? { ...i, ...vars.patch } : i)),
+        );
+      }
+      return updateLists(client, (list) => list.filter((i) => !ids.has(i.id)));
+    },
+    onError: (_error, _vars, snapshot) => restoreLists(client, snapshot),
+    onSettled: () => client.invalidateQueries({ queryKey: libraryKeys.references }),
   });
 }

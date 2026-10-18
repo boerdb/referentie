@@ -170,7 +170,19 @@ export type ListFilters = {
   hasPdf?: boolean;
   /** Alleen de prullenbak tonen in plaats van de gewone bibliotheek. */
   trash?: boolean;
+  /** Waarin gezocht wordt; standaard overal. */
+  field?: SearchField;
 };
+
+export const SEARCH_FIELDS = ["all", "title", "author", "journal", "doi"] as const;
+export type SearchField = (typeof SEARCH_FIELDS)[number];
+
+const AUTHOR_MATCH = `EXISTS (
+  SELECT 1 FROM reference_authors ra
+  JOIN authors a ON a.id = ra.author_id
+  WHERE ra.reference_id = r.id
+    AND (a.family_name LIKE ? OR CONCAT(a.given_name, ' ', a.family_name) LIKE ?)
+)`;
 
 export async function listReferences(
   userId: string,
@@ -195,17 +207,30 @@ export async function listReferences(
   if (filters.q?.trim()) {
     const q = filters.q.trim();
     const like = `%${escapeLike(q)}%`;
-    where.push(
-      `(MATCH(r.title, r.abstract, r.journal) AGAINST (? IN NATURAL LANGUAGE MODE)
-        OR r.title LIKE ? OR r.doi LIKE ?
-        OR EXISTS (
-          SELECT 1 FROM reference_authors ra
-          JOIN authors a ON a.id = ra.author_id
-          WHERE ra.reference_id = r.id
-            AND (a.family_name LIKE ? OR CONCAT(a.given_name, ' ', a.family_name) LIKE ?)
-        ))`,
-    );
-    params.push(q, like, like, like, like);
+    switch (filters.field ?? "all") {
+      case "title":
+        where.push("r.title LIKE ?");
+        params.push(like);
+        break;
+      case "author":
+        where.push(AUTHOR_MATCH);
+        params.push(like, like);
+        break;
+      case "journal":
+        where.push("r.journal LIKE ?");
+        params.push(like);
+        break;
+      case "doi":
+        where.push("r.doi LIKE ?");
+        params.push(like);
+        break;
+      default:
+        where.push(
+          `(MATCH(r.title, r.abstract, r.journal) AGAINST (? IN NATURAL LANGUAGE MODE)
+            OR r.title LIKE ? OR r.doi LIKE ? OR ${AUTHOR_MATCH})`,
+        );
+        params.push(q, like, like, like, like);
+    }
   }
 
   const [rows] = await getPool().query<RefRow[]>(

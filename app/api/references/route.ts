@@ -3,6 +3,8 @@ import { ensureOpenAccessPdf } from "@/lib/doi/oa-pdf";
 import {
   createReference,
   listReferences,
+  SEARCH_FIELDS,
+  type SearchField,
 } from "@/lib/references/queries";
 import type { ReferenceInput } from "@/lib/references/types";
 import { jsonError, jsonOk, readJson, requireSession } from "@/lib/api/http";
@@ -19,6 +21,7 @@ export async function GET(req: NextRequest) {
     starred: searchParams.get("starred") === "1",
     hasPdf: searchParams.get("hasPdf") === "1",
     trash: searchParams.get("trash") === "1",
+    field: SEARCH_FIELDS.find((f) => f === searchParams.get("in")) as SearchField | undefined,
   });
   return jsonOk({ items });
 }

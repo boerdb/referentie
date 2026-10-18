@@ -13,7 +13,8 @@ type Props = {
   filtered: boolean;
   trash: boolean;
   selectedId: string | null;
-  hidden: boolean;
+  /** Extra klassen voor zichtbaarheid per schermbreedte. */
+  className?: string;
   query: string;
   searchRef: React.RefObject<HTMLInputElement | null>;
   onQueryChange: (q: string) => void;
@@ -34,7 +35,7 @@ export function ReferenceList({
   filtered,
   trash,
   selectedId,
-  hidden,
+  className,
   query,
   searchRef,
   onQueryChange,
@@ -49,11 +50,12 @@ export function ReferenceList({
   return (
     <section
       className={cn(
-        "panel flex h-full min-w-0 flex-col overflow-x-hidden border-r lg:w-[var(--list-w)] lg:shrink-0",
-        hidden ? "hidden lg:flex" : "flex w-full",
+        "panel h-full min-w-0 flex-col overflow-x-hidden max-lg:w-full lg:min-h-0 lg:flex-1",
+        className,
       )}
     >
-      <div className="space-y-3 border-b border-[var(--border)] px-3 pt-3 pb-3 lg:px-4">
+      {/* Op desktop staan titel en zoekveld in de werkbalk en de lijstkop. */}
+      <div className="space-y-3 border-b border-[var(--border)] px-3 pt-3 pb-3 lg:hidden">
         <div className="flex items-center gap-2">
           <button
             type="button"
