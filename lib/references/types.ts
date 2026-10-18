@@ -27,6 +27,8 @@ export type ReferenceRecord = {
   createdAt: string;
   updatedAt: string;
   authors: { givenName: string; familyName: string }[];
+  /** Melding van Crossref/Retraction Watch (teruggetrokken e.d.), of null. */
+  retraction: { type: string; doi: string | null; date: string | null } | null;
   /** Kleurlabel 1–7 (zie LABELS), of null. */
   label: number | null;
   tags: string[];
@@ -69,6 +71,7 @@ export type ReferenceCounts = {
   hasPdf: number;
   trash: number;
   duplicates: number;
+  retracted: number;
 };
 
 export const LABELS = [

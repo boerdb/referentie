@@ -32,7 +32,14 @@ export function useCitationCopy() {
     window.setTimeout(() => setCiteCopied(null), 3500);
   }
 
-  async function copyCitation(id: string, styleId: CslStyleId = style) {
+  async function copyCitation(id: string, styleId: CslStyleId = style, retracted = false) {
+    if (retracted) {
+      toast.show({
+        kind: "error",
+        message: "Let op: dit artikel is teruggetrokken",
+        description: "Het citaat wordt wel gekopieerd.",
+      });
+    }
     const res = await api<{ citation?: string; html?: string }>(`/api/cite/${id}?style=${styleId}`);
     if (!res.ok || !res.data.citation) {
       toast.error("Citaat ophalen mislukt", res.ok ? undefined : res.error);

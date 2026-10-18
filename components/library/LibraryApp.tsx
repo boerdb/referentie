@@ -161,7 +161,9 @@ export function LibraryApp({ user }: Props) {
 
   const listTitle = view.trash
     ? "Prullenbak"
-    : view.duplicates
+    : view.retracted
+      ? "Teruggetrokken artikelen"
+      : view.duplicates
       ? "Mogelijke dubbelen"
       : currentGroup
         ? currentGroup.name

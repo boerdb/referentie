@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     trash: searchParams.get("trash") === "1",
     field: SEARCH_FIELDS.find((f) => f === searchParams.get("in")) as SearchField | undefined,
     tagId: searchParams.get("tag") ?? undefined,
+    retracted: searchParams.get("retracted") === "1",
   };
 
   const label = Number(searchParams.get("label"));

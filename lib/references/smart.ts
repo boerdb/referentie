@@ -13,6 +13,7 @@ export const SMART_FIELDS = {
   status: { label: "Leesstatus", type: "status" },
   starred: { label: "Favoriet", type: "boolean" },
   hasPdf: { label: "Heeft PDF", type: "boolean" },
+  retracted: { label: "Teruggetrokken", type: "boolean" },
   tag: { label: "Trefwoord", type: "tag" },
   label: { label: "Label", type: "label" },
   added: { label: "Toegevoegd", type: "days" },
@@ -158,6 +159,8 @@ function ruleToSql(rule: SmartRule): { sql: string; params: unknown[] } {
       };
     case "tag":
       return { sql: op === "is_not" ? `NOT ${TAG_EXISTS}` : TAG_EXISTS, params: [value] };
+    case "retracted":
+      return { sql: `r.retraction_type IS ${op === "is" ? "NOT " : ""}NULL`, params: [] };
     case "label":
       return op === "is_not"
         ? { sql: "(r.label IS NULL OR r.label <> ?)", params: [Number(value)] }

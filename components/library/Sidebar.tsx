@@ -18,6 +18,7 @@ import {
   Star,
   Tag,
   Trash2,
+  TriangleAlert,
   Upload,
   X,
   type LucideIcon,
@@ -45,6 +46,8 @@ export type LibraryView = {
   tag: string | null;
   label: number | null;
   duplicates: boolean;
+  /** Alleen artikelen met een retraction-melding. */
+  retracted: boolean;
 };
 
 export const DEFAULT_VIEW: LibraryView = {
@@ -56,6 +59,7 @@ export const DEFAULT_VIEW: LibraryView = {
   tag: null,
   label: null,
   duplicates: false,
+  retracted: false,
 };
 
 /** Bron in de zijbalk; filters (favoriet, PDF) blijven daarbij staan. */
@@ -68,6 +72,7 @@ function source(view: LibraryView, patch: Partial<LibraryView>): LibraryView {
     tag: null,
     label: null,
     duplicates: false,
+    retracted: false,
     ...patch,
   };
 }
@@ -109,7 +114,8 @@ export function Sidebar(props: Props) {
   const [collapsed, setCollapsed] = usePref<string[]>("sidebarCollapsed", NO_IDS);
   const manual = groups.filter((g) => g.kind === "manual");
   const smart = groups.filter((g) => g.kind === "smart");
-  const inLibrary = !view.trash && !view.group && !view.tag && !view.label && !view.duplicates;
+  const inLibrary =
+    !view.trash && !view.group && !view.tag && !view.label && !view.duplicates && !view.retracted;
 
   function select(next: LibraryView) {
     onViewChange(next);
@@ -187,6 +193,16 @@ export function Sidebar(props: Props) {
           >
             Mogelijke dubbelen
           </SourceItem>
+          {(counts?.retracted ?? 0) > 0 && (
+            <SourceItem
+              icon={TriangleAlert}
+              active={view.retracted}
+              count={counts?.retracted}
+              onClick={() => select(source(view, { retracted: true, starred: false, hasPdf: false }))}
+            >
+              <span className="text-[var(--danger)]">Teruggetrokken</span>
+            </SourceItem>
+          )}
           <SourceItem
             icon={Trash2}
             active={view.trash}

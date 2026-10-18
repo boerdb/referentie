@@ -13,6 +13,7 @@ import {
   Star,
   StarOff,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toaster";
 import { api } from "@/lib/api/client";
@@ -341,6 +342,8 @@ function ReferenceDetail({
       </header>
       <div className="hidden lg:block">{tabBar(false)}</div>
 
+      {reference.retraction && <RetractionBanner retraction={reference.retraction} />}
+
       {inTrash && (
         <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--danger-soft)] px-4 py-2.5 text-sm lg:px-5">
           <Trash2 className="h-4 w-4 shrink-0 text-[var(--danger)]" />
@@ -371,7 +374,7 @@ function ReferenceDetail({
                 reference={reference}
                 citeCopied={citeCopied}
                 exporting={exporting}
-                onCopy={(style) => void copyCitation(reference.id, style)}
+                onCopy={(style) => void copyCitation(reference.id, style, Boolean(reference.retraction))}
                 onExport={(mode) => void exportReference(reference, mode)}
               />
               {!inTrash && <OrganizeSection reference={reference} />}
@@ -409,6 +412,54 @@ function ReferenceDetail({
         </div>
       )}
     </>
+  );
+}
+
+const RETRACTION_LABEL: Record<string, { title: string; text: string }> = {
+  retraction: {
+    title: "Dit artikel is teruggetrokken",
+    text: "De uitgever heeft het artikel ingetrokken. Citeer het niet als bewijs.",
+  },
+  withdrawal: {
+    title: "Dit artikel is ingetrokken",
+    text: "Het artikel is door de auteurs of uitgever ingetrokken.",
+  },
+  expression_of_concern: {
+    title: "Expression of concern",
+    text: "De uitgever heeft twijfels over (delen van) dit artikel gemeld.",
+  },
+};
+
+function RetractionBanner({
+  retraction,
+}: {
+  retraction: NonNullable<ReferenceRecord["retraction"]>;
+}) {
+  const label = RETRACTION_LABEL[retraction.type] ?? RETRACTION_LABEL.retraction;
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-3 border-b border-[var(--border)] bg-[var(--danger-soft)] px-4 py-3 text-sm lg:px-5"
+    >
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[var(--danger)]" />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-[var(--danger)]">{label.title}</p>
+        <p className="mt-0.5 text-[var(--text-muted)]">
+          {label.text}
+          {retraction.date && ` (${new Date(retraction.date).toLocaleDateString("nl-NL")})`}
+        </p>
+        {retraction.doi && (
+          <a
+            href={`https://doi.org/${retraction.doi}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-block text-xs font-medium text-[var(--accent)] hover:underline"
+          >
+            Melding bekijken
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Circle, Columns3, FileText, Palette, Star } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Columns3, FileText, Palette, Star, TriangleAlert } from "lucide-react";
 import type { ReferenceRecord } from "@/lib/references/types";
 import { cn } from "@/lib/utils";
 import { DRAG_MIME, LabelDot, STATUS_LABEL, StatusDot, authorShort } from "./shared";
@@ -362,7 +362,17 @@ function Cell({ column, item }: { column: ColumnId; item: ReferenceRecord }) {
     case "year":
       return <>{item.year ?? ""}</>;
     case "title":
-      return <>{item.title}</>;
+      return item.retraction ? (
+        <span className="inline-flex max-w-full items-center gap-1.5">
+          <TriangleAlert
+            className="h-3.5 w-3.5 shrink-0 text-[var(--danger)]"
+            aria-label="Teruggetrokken of onder voorbehoud"
+          />
+          <span className="truncate line-through decoration-[var(--danger)]/50">{item.title}</span>
+        </span>
+      ) : (
+        <>{item.title}</>
+      );
     case "journal":
       return <>{item.journal ?? ""}</>;
     case "status":

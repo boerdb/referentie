@@ -18,9 +18,13 @@ install_studies_import_cron() {
   tmp="$(mktemp)"
   crontab -l 2>/dev/null | grep -v "$marker" > "$tmp" || true
   echo "$line" >> "$tmp"
+  # Wekelijks (maandag 06:30) controleren op teruggetrokken artikelen.
+  grep -v "referentie-retractions" "$tmp" > "$tmp.2" || true
+  mv "$tmp.2" "$tmp"
+  echo "30 6 * * 1 cd ${APP_DIR} && ${node_bin} scripts/retraction-check.mjs >> ${APP_DIR}/data/retractions.log 2>&1 # referentie-retractions" >> "$tmp"
   crontab "$tmp"
   rm -f "$tmp"
-  echo "Cron studies-import: dagelijks 15:05"
+  echo "Cron studies-import: dagelijks 15:05; retraction-controle: maandag 06:30"
 }
 
 echo "==> PM2 apps (huidige poorten):"
@@ -52,6 +56,7 @@ npm run db:migrate
 npm run build
 # Doorzoekbare tekst aanvullen voor oudere PDF's; een fout hier stopt de deploy niet.
 npm run fulltext:backfill || echo "Waarschuwing: fulltext-backfill mislukt"
+npm run retractions:check || echo "Waarschuwing: retraction-controle mislukt"
 
 if ss -tlnH | grep -q ':3023 '; then
   echo "Waarschuwing: poort 3023 is al bezet."

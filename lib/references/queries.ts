@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getPool, withTransaction } from "@/lib/db/mysql";
+import { checkAndStoreRetraction } from "@/lib/doi/retraction";
 import { smartRulesToSql, type SmartRules } from "./smart";
 import { loadTagsFor, setReferenceTags } from "./tags";
 import type { AuthorInput, ReferenceCounts, ReferenceInput, ReferenceRecord } from "./types";
@@ -24,6 +25,9 @@ type RefRow = RowDataPacket & {
   starred: number;
   deleted_at: Date | null;
   label: number | null;
+  retraction_type: string | null;
+  retraction_doi: string | null;
+  retraction_date: Date | string | null;
   created_at: Date;
   updated_at: Date;
   has_pdf: number;
@@ -62,6 +66,16 @@ function mapRow(row: RefRow, authors: AuthorRow[], extras: Extras): ReferenceRec
     starred: Boolean(row.starred),
     deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
     label: row.label ?? null,
+    retraction: row.retraction_type
+      ? {
+          type: row.retraction_type,
+          doi: row.retraction_doi,
+          date:
+            row.retraction_date instanceof Date
+              ? row.retraction_date.toISOString().slice(0, 10)
+              : (row.retraction_date ?? null),
+        }
+      : null,
     tags: extras.tags,
     groupIds: extras.groupIds,
     createdAt: row.created_at.toISOString(),
@@ -225,6 +239,8 @@ export type ListFilters = {
   label?: number;
   /** Alleen deze id's (bijv. dubbelen). */
   ids?: string[];
+  /** Alleen artikelen met een retraction-melding. */
+  retracted?: boolean;
 };
 
 export const SEARCH_FIELDS = ["all", "title", "author", "journal", "doi", "fulltext"] as const;
@@ -275,6 +291,9 @@ export async function listReferences(
   if (filters.tagId) {
     where.push("EXISTS (SELECT 1 FROM reference_tags rt WHERE rt.tag_id = ? AND rt.reference_id = r.id)");
     params.push(filters.tagId);
+  }
+  if (filters.retracted) {
+    where.push("r.retraction_type IS NOT NULL");
   }
   if (filters.label) {
     where.push("r.label = ?");
@@ -355,7 +374,8 @@ export async function countReferences(userId: string): Promise<ReferenceCounts> 
        SUM(r.deleted_at IS NULL AND EXISTS (
          SELECT 1 FROM attachments att WHERE att.reference_id = r.id
        )) AS has_pdf,
-       SUM(r.deleted_at IS NOT NULL) AS trash
+       SUM(r.deleted_at IS NOT NULL) AS trash,
+       SUM(r.deleted_at IS NULL AND r.retraction_type IS NOT NULL) AS retracted
      FROM ref_items r
      WHERE r.user_id = ?`,
     [userId],
@@ -371,6 +391,7 @@ export async function countReferences(userId: string): Promise<ReferenceCounts> 
     hasPdf: n(row.has_pdf),
     trash: n(row.trash),
     duplicates: 0,
+    retracted: n(row.retracted),
   };
 }
 
@@ -466,6 +487,8 @@ export async function createReference(
   });
   const ref = await getReference(userId, id);
   if (!ref) throw new Error("Reference not found after insert");
+  // Op de achtergrond kijken of het artikel is teruggetrokken.
+  if (ref.doi) void checkAndStoreRetraction(ref.id, ref.doi);
   return ref;
 }
 
@@ -529,6 +552,7 @@ export async function updateReference(
     if (input.tags) await setReferenceTags(conn, userId, id, input.tags);
     return true;
   });
+  if (found && input.doi) void checkAndStoreRetraction(id, input.doi);
   return found ? getReference(userId, id) : null;
 }
 

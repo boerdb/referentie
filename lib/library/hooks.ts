@@ -31,6 +31,7 @@ export type ListParams = {
   tag: string | null;
   label: number | null;
   duplicates: boolean;
+  retracted: boolean;
 };
 
 /** Rechthoek als fractie van de pagina (0–1), zodat hij bij elk zoomniveau klopt. */
@@ -96,6 +97,7 @@ function listUrl(params: ListParams): string {
   if (params.tag) search.set("tag", params.tag);
   if (params.label) search.set("label", String(params.label));
   if (params.duplicates) search.set("duplicates", "1");
+  if (params.retracted) search.set("retracted", "1");
   return `/api/references?${search}`;
 }
 
