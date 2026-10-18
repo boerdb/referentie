@@ -21,3 +21,16 @@ export function findFirstDoiInText(text: string): string | null {
   }
   return null;
 }
+
+/** Alle DOI's in vrije tekst, zonder dubbelen, in volgorde van voorkomen. */
+export function findAllDoisInText(text: string): string[] {
+  if (!text) return [];
+  const out: string[] = [];
+  for (const match of text.matchAll(DOI_IN_TEXT)) {
+    const normalized = cleanDoiForLookup(normalizeDoi(trimDoiTail(match[1] ?? match[0])));
+    if (normalized.startsWith("10.") && normalized.includes("/") && !out.includes(normalized)) {
+      out.push(normalized);
+    }
+  }
+  return out;
+}

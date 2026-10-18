@@ -7,6 +7,8 @@ const allowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS ?? "")
 
 const nextConfig: NextConfig = {
   ...(allowedDevOrigins.length ? { allowedDevOrigins } : {}),
+  // pdf.js niet bundelen op de server: dan vindt het zijn worker gewoon in node_modules.
+  serverExternalPackages: ["pdfjs-dist"],
   headers: async () => [
     {
       source: "/sw.js",

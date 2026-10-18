@@ -1,6 +1,7 @@
 import { redisGet, redisSetEx } from "@/lib/redis";
 import type { ReferenceInput } from "@/lib/references/types";
 import { fetchAbstractByDoi, stripAbstractHtml } from "@/lib/doi/abstract";
+import { decodeEntities } from "@/lib/text/entities";
 import {
   cleanDoiForLookup,
   doiLookupCandidates,
@@ -221,6 +222,21 @@ async function fetchMetadataByDoiOnce(doi: string): Promise<ReferenceInput> {
   throw new Error(errors[errors.length - 1] ?? "DOI ophalen mislukt.");
 }
 
+/** Tekstvelden zonder HTML-entiteiten (bijv. "Anaesthesia Critical Care &amp; Pain Medicine"). */
+function decodeFields(m: ReferenceInput): ReferenceInput {
+  const d = (v: string | null | undefined) => (v ? decodeEntities(v) : v);
+  return {
+    ...m,
+    title: decodeEntities(m.title),
+    journal: d(m.journal),
+    abstract: d(m.abstract),
+    authors: m.authors?.map((a) => ({
+      givenName: d(a.givenName) ?? "",
+      familyName: d(a.familyName) ?? "",
+    })),
+  };
+}
+
 export async function fetchMetadataByDoi(
   doiRaw: string,
 ): Promise<ReferenceInput> {
@@ -232,7 +248,7 @@ export async function fetchMetadataByDoi(
   let lastErr: Error | null = null;
   for (const doi of candidates) {
     try {
-      return await fetchMetadataByDoiOnce(doi);
+      return decodeFields(await fetchMetadataByDoiOnce(doi));
     } catch (e) {
       lastErr = e instanceof Error ? e : new Error("DOI ophalen mislukt.");
     }

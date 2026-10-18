@@ -1,4 +1,4 @@
-import { normalizeTitle } from "@/lib/references/duplicates";
+import { normalizeTitle } from "@/lib/references/normalize-title";
 import type { ReferenceRecord } from "@/lib/references/types";
 import { downloadOpenAccessPdf } from "./oa-pdf";
 

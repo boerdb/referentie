@@ -1,15 +1,9 @@
 import type { RowDataPacket } from "mysql2/promise";
 import { randomUUID } from "crypto";
 import { getPool, withTransaction } from "@/lib/db/mysql";
+import { normalizeTitle } from "./normalize-title";
 
-/** Titel zonder accenten, leestekens en hoofdletters, om varianten te herkennen. */
-export function normalizeTitle(title: string): string {
-  return title
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
+export { normalizeTitle };
 
 function normalizeDoi(doi: string): string {
   return doi
