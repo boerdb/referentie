@@ -1,9 +1,32 @@
+import path from "path";
+import { pathToFileURL } from "url";
 import { findFirstDoiInText } from "@/lib/doi/from-text";
+
+/**
+ * pdf.js voor de server. In de Next-build staat de worker niet naast de gebundelde code
+ * ("Setting up fake worker failed"), dus wijzen we naar het bestand in node_modules.
+ */
+async function loadPdfjs() {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
+      path.join(
+        /* turbopackIgnore: true */ process.cwd(),
+        "node_modules",
+        "pdfjs-dist",
+        "legacy",
+        "build",
+        "pdf.worker.mjs",
+      ),
+    ).href;
+  }
+  return pdfjs;
+}
 
 const MAX_PAGES = 6;
 
 async function extractWithPdfJs(data: Uint8Array): Promise<string> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadPdfjs();
   const doc = await pdfjs.getDocument({
     data,
     useSystemFonts: true,
@@ -32,7 +55,7 @@ const FULLTEXT_MAX_CHARS = 2_000_000;
 export async function extractFullText(
   data: Uint8Array,
 ): Promise<{ text: string; pageCount: number }> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadPdfjs();
   const doc = await pdfjs.getDocument({ data, useSystemFonts: true, disableAutoFetch: true }).promise;
   const parts: string[] = [];
   let length = 0;

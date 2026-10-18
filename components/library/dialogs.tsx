@@ -85,7 +85,7 @@ export function CommandPalette({
           <PaletteAction icon={Plus} label="Nieuw artikel" hint="N" onClick={() => run(onNew)} />
           <PaletteAction
             icon={FileUp}
-            label="Bestand importeren (RIS, BibTeX, PubMed)"
+            label="Importeren: PDF, RIS, BibTeX of PubMed"
             onClick={() => run(onImportFile)}
           />
           {selected && !selected.deletedAt && (

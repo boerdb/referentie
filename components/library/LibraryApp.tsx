@@ -455,6 +455,14 @@ export function LibraryApp({ user }: Props) {
     }
   }
 
+  /** Eén knop voor alles: PDF's worden artikelen, RIS/BibTeX/PubMed worden ingelezen. */
+  async function importAny(files: File[]) {
+    const pdfs = files.filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+    const others = files.filter((f) => !pdfs.includes(f));
+    if (pdfs.length > 0) await importPdfs(pdfs);
+    for (const file of others) await importExchange(file);
+  }
+
   async function importExchange(file: File) {
     setExchangeImporting(true);
     const groupId = currentGroup?.kind === "manual" ? currentGroup.id : null;
@@ -840,11 +848,12 @@ export function LibraryApp({ user }: Props) {
         ref={exchangeFileRef}
         type="file"
         accept={IMPORT_ACCEPT}
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
+          const files = [...(e.target.files ?? [])];
           e.target.value = "";
-          if (file) void importExchange(file);
+          void importAny(files);
         }}
       />
 

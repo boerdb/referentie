@@ -157,7 +157,7 @@ export function Toolbar(props: Props) {
       </ToolButton>
       {!trash && (
         <ToolButton
-          label="Bestand importeren (RIS, BibTeX, PubMed)"
+          label="Importeren: PDF, RIS, BibTeX of PubMed"
           disabled={props.importing}
           onClick={props.onImport}
         >

@@ -54,5 +54,6 @@ export async function importFile(file: File, groupId: string | null) {
   return api<ImportResult>("/api/import", { method: "POST", body: fd });
 }
 
+/** PDF's en literatuurbestanden; de app kiest per bestand de juiste import. */
 export const IMPORT_ACCEPT =
-  ".ris,.bib,.bibtex,.nbib,.txt,application/x-research-info-systems,application/x-bibtex,text/plain";
+  ".pdf,application/pdf,.ris,.bib,.bibtex,.nbib,.txt,application/x-research-info-systems,application/x-bibtex,text/plain";

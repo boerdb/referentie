@@ -72,7 +72,9 @@ export async function findDuplicateSets(userId: string): Promise<string[][]> {
   return [...sets.values()].filter((set) => set.length > 1);
 }
 
-const FILL_COLUMNS = ["abstract", "year", "journal", "volume", "issue", "pages", "doi", "url", "pmid", "label"];
+const FILL_TEXT = ["abstract", "journal", "volume", "issue", "pages", "doi", "url", "pmid"];
+/** Getallen: NULLIF met '' geeft in strikte modus "Truncated incorrect DECIMAL value". */
+const FILL_NUMBERS = ["year", "label"];
 const STATUS_RANK = { unread: 0, reading: 1, read: 2 } as const;
 
 /**
@@ -102,7 +104,10 @@ export async function mergeReferences(
     for (const id of others) {
       await conn.query(
         `UPDATE ref_items k JOIN ref_items m ON m.id = ?
-         SET ${FILL_COLUMNS.map((c) => `k.${c} = COALESCE(NULLIF(k.${c}, ''), m.${c})`).join(", ")}
+         SET ${[
+           ...FILL_TEXT.map((c) => `k.${c} = COALESCE(NULLIF(k.${c}, ''), m.${c})`),
+           ...FILL_NUMBERS.map((c) => `k.${c} = COALESCE(k.${c}, m.${c})`),
+         ].join(", ")}
          WHERE k.id = ?`,
         [id, keepId],
       );
