@@ -8,6 +8,7 @@ declare module "citeproc" {
     setOutputFormat(format: "text" | "html" | "rtf"): void;
     updateItems(ids: string[]): void;
     makeBibliography(): [unknown, string[]] | false;
+    makeCitationCluster(items: { id: string }[]): string;
   }
   const CSL: {
     Engine: new (sys: Sys, style: string, lang?: string, forceLang?: boolean) => Engine;

@@ -39,7 +39,7 @@ import { usePref } from "@/lib/library/prefs";
 import { clearOfflineCache } from "@/lib/pwa/cache";
 import type { SmartRules } from "@/lib/references/smart";
 import { LABELS, type GroupRecord, type ReferenceRecord } from "@/lib/references/types";
-import { shareOrCopyText } from "@/lib/share/files";
+import { copyRichText, shareOrCopyText } from "@/lib/share/files";
 import { looksLikePdfFile } from "@/lib/uploads/is-pdf";
 import { cn } from "@/lib/utils";
 import { AddSheet, CommandPalette, DropOverlay, ReferenceForm } from "./dialogs";
@@ -49,6 +49,7 @@ import { groupOptions } from "./inspector/organize";
 import { useCitationCopy } from "./inspector/useCitationCopy";
 import { useExport } from "./inspector/useExport";
 import { PdfReader, type PdfFocus } from "./PdfReader";
+import { ManuscriptDialog, temporaryCitation } from "./ManuscriptDialog";
 import { OnlineSearch } from "./OnlineSearch";
 import { ReferenceList } from "./ReferenceList";
 import {
@@ -118,6 +119,7 @@ export function LibraryApp({ user }: Props) {
   const [pdfDropActive, setPdfDropActive] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
   const [doiImporting, setDoiImporting] = useState(false);
+  const [manuscriptOpen, setManuscriptOpen] = useState(false);
   /** Open regeleditor: nieuwe slimme groep of een bestaande bewerken. */
   const [smartDialog, setSmartDialog] = useState<{ group: GroupRecord | null } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -546,6 +548,17 @@ export function LibraryApp({ user }: Props) {
       single
         ? { label: `Citaat kopiëren (${styleLabel})`, hint: "C", onSelect: () => void citation.copyCitation(single.id) }
         : { label: `Bibliografie kopiëren (${styleLabel})`, onSelect: () => bulk({ kind: "bibliography" }) },
+      {
+        label: "Tijdelijk citaat kopiëren",
+        onSelect: () => {
+          const marker = temporaryCitation(targets);
+          void copyRichText(marker, marker).then((ok) =>
+            ok
+              ? toast.success("Tijdelijk citaat gekopieerd", `${marker} — plak in Word, en maak het op via Manuscript opmaken.`)
+              : toast.error("Kopiëren mislukt"),
+          );
+        },
+      },
       { kind: "separator" },
       {
         label: single?.starred ? "Uit favorieten" : "Aan favorieten",
@@ -910,6 +923,7 @@ export function LibraryApp({ user }: Props) {
           )
         }
         exportCount={multiSelection.length > 0 ? multiSelection.length : items.length}
+        onManuscript={() => setManuscriptOpen(true)}
       />
 
       <div
@@ -1131,6 +1145,7 @@ export function LibraryApp({ user }: Props) {
             if (primary) void citation.copyCitation(primary.id);
           }}
           onImportFile={() => exchangeFileRef.current?.click()}
+          onManuscript={() => setManuscriptOpen(true)}
           styleLabel={CSL_STYLES[citation.style].label}
           onExport={(mode) => {
             if (primary) void exporter.exportReference(primary, mode);
@@ -1145,6 +1160,7 @@ export function LibraryApp({ user }: Props) {
           onClose={() => setRowMenu(null)}
         />
       )}
+      {manuscriptOpen && <ManuscriptDialog onClose={() => setManuscriptOpen(false)} />}
       {smartDialog && (
         <SmartGroupDialog
           title={smartDialog.group ? "Slimme groep bewerken" : "Nieuwe slimme groep"}

@@ -606,3 +606,25 @@ export async function listTrashedIds(userId: string): Promise<string[]> {
   );
   return rows.map((row) => row.id as string);
 }
+
+/**
+ * Id-begin (zonder streepjes, min. 6 tekens) → volledig id, voor tijdelijke citaten in
+ * manuscripten. Alleen als het begin bij precies één (niet-verwijderd) artikel past.
+ */
+export async function findReferenceIdsByPrefix(
+  userId: string,
+  prefixes: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(prefixes.map((p) => p.toLowerCase()).filter((p) => /^[0-9a-f]{6,32}$/.test(p)))];
+  const out = new Map<string, string>();
+  if (unique.length === 0) return out;
+  const [rows] = await getPool().query<RowDataPacket[]>(
+    "SELECT id, REPLACE(id, '-', '') AS compact FROM ref_items WHERE user_id = ? AND deleted_at IS NULL",
+    [userId],
+  );
+  for (const prefix of unique) {
+    const hits = rows.filter((row) => String(row.compact).startsWith(prefix));
+    if (hits.length === 1) out.set(prefix, hits[0].id as string);
+  }
+  return out;
+}

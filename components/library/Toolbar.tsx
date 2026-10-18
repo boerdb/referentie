@@ -56,6 +56,7 @@ type Props = {
   onExport: (format: "ris" | "bibtex") => void;
   /** Aantal artikelen dat geëxporteerd wordt (selectie, anders de hele lijst). */
   exportCount: number;
+  onManuscript: () => void;
 };
 
 /** Werkbalk over de volle breedte, alleen op desktop (Bookends-stijl). */
@@ -180,6 +181,8 @@ export function Toolbar(props: Props) {
             },
             { label: "RIS (EndNote, Zotero, Mendeley)", onSelect: () => props.onExport("ris") },
             { label: "BibTeX (LaTeX, Overleaf)", onSelect: () => props.onExport("bibtex") },
+            { kind: "separator" },
+            { label: "Word-manuscript opmaken…", onSelect: props.onManuscript },
           ]}
         />
       )}

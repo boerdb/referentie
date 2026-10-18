@@ -5,6 +5,7 @@ import {
   Braces,
   Copy,
   Download,
+  FileText,
   FileUp,
   Loader2,
   PenLine,
@@ -29,6 +30,7 @@ export function CommandPalette({
   onCopyApa,
   onExport,
   onImportFile,
+  onManuscript,
   styleLabel,
 }: {
   selected: ReferenceRecord | null;
@@ -39,6 +41,7 @@ export function CommandPalette({
   onCopyApa: () => void;
   onExport: (mode: "pdf" | "summary" | "bibtex") => void;
   onImportFile: () => void;
+  onManuscript: () => void;
   /** Naam van de gekozen citeerstijl. */
   styleLabel: string;
 }) {
@@ -87,6 +90,11 @@ export function CommandPalette({
             icon={FileUp}
             label="Importeren: PDF, RIS, BibTeX of PubMed"
             onClick={() => run(onImportFile)}
+          />
+          <PaletteAction
+            icon={FileText}
+            label="Word-manuscript opmaken (.docx)…"
+            onClick={() => run(onManuscript)}
           />
           {selected && !selected.deletedAt && (
             <>

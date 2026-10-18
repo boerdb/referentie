@@ -55,6 +55,48 @@ export function toCslItem(ref: ReferenceRecord): CslItem {
   return item;
 }
 
+/** Staan de citaten in deze stijl in superscript (AMA, NEJM)? */
+export function citesInSuperscript(styleId: CslStyleId): boolean {
+  const xml = readCslFile(CSL_STYLES[styleId].file);
+  const citation = xml.match(/<citation[\s\S]*?<\/citation>/)?.[0] ?? "";
+  return citation.includes('vertical-align="sup"');
+}
+
+/**
+ * Citaten in de lopende tekst (bijv. "(1,2)" of "(Meyhoff, 2022)") plus de literatuurlijst.
+ * `refs` in volgorde van eerste vermelding, zodat nummerstijlen in die volgorde nummeren.
+ */
+export function formatCitationClusters(
+  refs: ReferenceRecord[],
+  clusters: string[][],
+  styleId: CslStyleId,
+  locale = "en-US",
+): { citations: string[]; bibliography: string[] } {
+  if (refs.length === 0) return { citations: clusters.map(() => ""), bibliography: [] };
+  const items = new Map(refs.map((r) => [r.id, toCslItem(r)]));
+  const engine = new CSL.Engine(
+    {
+      retrieveLocale: (lang: string) => {
+        try {
+          return readCslFile(`locales-${lang}.xml`);
+        } catch {
+          return readCslFile("locales-en-US.xml");
+        }
+      },
+      retrieveItem: (id: string) => items.get(id),
+    },
+    readCslFile(CSL_STYLES[styleId].file),
+    locale,
+    true,
+  );
+  engine.setOutputFormat("text");
+  engine.updateItems(refs.map((r) => r.id));
+  const citations = clusters.map((ids) => engine.makeCitationCluster(ids.map((id) => ({ id }))).trim());
+  const bib = engine.makeBibliography() as [unknown, string[]] | false;
+  const bibliography = bib ? bib[1].map((s) => s.replace(/\s+/g, " ").trim()) : [];
+  return { citations, bibliography };
+}
+
 export type Bibliography = {
   /** Eén regel per artikel, in de volgorde van de stijl. */
   entries: string[];
