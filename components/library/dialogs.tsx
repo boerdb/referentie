@@ -1,7 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Braces, Copy, Download, Loader2, PenLine, Plus, Search, Share2, Upload, X } from "lucide-react";
+import {
+  Braces,
+  Copy,
+  Download,
+  FileUp,
+  Loader2,
+  PenLine,
+  Plus,
+  Search,
+  Share2,
+  Upload,
+  X,
+} from "lucide-react";
 import { useToast } from "@/components/ui/Toaster";
 import { api } from "@/lib/api/client";
 import type { ReferenceRecord } from "@/lib/references/types";
@@ -16,6 +28,8 @@ export function CommandPalette({
   onNew,
   onCopyApa,
   onExport,
+  onImportFile,
+  styleLabel,
 }: {
   selected: ReferenceRecord | null;
   importing: boolean;
@@ -24,6 +38,9 @@ export function CommandPalette({
   onNew: () => void;
   onCopyApa: () => void;
   onExport: (mode: "pdf" | "summary" | "bibtex") => void;
+  onImportFile: () => void;
+  /** Naam van de gekozen citeerstijl. */
+  styleLabel: string;
 }) {
   const [query, setQuery] = useState("");
 
@@ -66,12 +83,17 @@ export function CommandPalette({
             onClick={() => onImportDoi(query.trim())}
           />
           <PaletteAction icon={Plus} label="Nieuw artikel" hint="N" onClick={() => run(onNew)} />
+          <PaletteAction
+            icon={FileUp}
+            label="Bestand importeren (RIS, BibTeX, PubMed)"
+            onClick={() => run(onImportFile)}
+          />
           {selected && !selected.deletedAt && (
             <>
               <p className="section-label px-2.5 pt-3 pb-1">Huidig artikel</p>
               <PaletteAction
                 icon={Copy}
-                label="APA-citaat kopiëren"
+                label={`Citaat kopiëren (${styleLabel})`}
                 hint="C"
                 onClick={() => run(onCopyApa)}
               />
@@ -101,11 +123,13 @@ export function AddSheet({
   onUploadPdf,
   onDoi,
   onManual,
+  onImportFile,
 }: {
   onClose: () => void;
   onUploadPdf: () => void;
   onDoi: () => void;
   onManual: () => void;
+  onImportFile: () => void;
 }) {
   function run(fn: () => void) {
     onClose();
@@ -134,6 +158,12 @@ export function AddSheet({
             title="DOI plakken"
             description="Metadata ophalen via Crossref"
             onClick={() => run(onDoi)}
+          />
+          <SheetOption
+            icon={FileUp}
+            title="Bestand importeren"
+            description="RIS, BibTeX of PubMed (.nbib) uit Zotero, EndNote of PubMed"
+            onClick={() => run(onImportFile)}
           />
           <SheetOption
             icon={PenLine}

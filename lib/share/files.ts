@@ -99,3 +99,49 @@ export async function shareOrCopyText(
   await navigator.clipboard.writeText(text);
   return "copied";
 }
+
+/** Een willekeurig bestand (bijv. .ris of .bib) delen op de telefoon of downloaden. */
+export async function shareOrDownloadFile(
+  blob: Blob,
+  fileName: string,
+): Promise<"shared" | "downloaded"> {
+  const file = new File([blob], fileName, { type: blob.type || "text/plain" });
+  // Alleen op aanraakschermen de share-sheet; op desktop gewoon downloaden.
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  if (touch && canShareFiles(file)) {
+    try {
+      await navigator.share({ files: [file], title: fileName });
+      return "shared";
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return "shared";
+    }
+  }
+  triggerDownload(blob, fileName);
+  return "downloaded";
+}
+
+/**
+ * Kopieert opgemaakte tekst (cursief tijdschrift, nummering) mét platte tekst als terugval,
+ * zodat plakken in Word of Pages de opmaak behoudt.
+ */
+export async function copyRichText(html: string, text: string): Promise<boolean> {
+  try {
+    if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    }
+  } catch {
+    /* sommige browsers staan alleen platte tekst toe */
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}

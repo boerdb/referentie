@@ -6,6 +6,8 @@ import {
   BookOpenText,
   Braces,
   ChevronLeft,
+  Copy,
+  Download,
   RotateCcw,
   Share2,
   Star,
@@ -73,6 +75,8 @@ export type BulkRequest =
   | { kind: "status"; status: RefStatus }
   | { kind: "starred"; starred: boolean }
   | { kind: "bibtex" }
+  | { kind: "bibliography" }
+  | { kind: "export"; format: "ris" | "bibtex" }
   | { kind: "trash" }
   | { kind: "restore" }
   | { kind: "purge" };
@@ -455,10 +459,24 @@ function BulkPanel({
             </button>
             <button
               type="button"
-              className="btn-secondary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm"
-              onClick={() => onBulk({ kind: "bibtex" })}
+              className="btn-primary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm"
+              onClick={() => onBulk({ kind: "bibliography" })}
             >
-              <Braces className="h-4 w-4" /> BibTeX van selectie
+              <Copy className="h-4 w-4" /> Bibliografie kopiëren
+            </button>
+            <button
+              type="button"
+              className="btn-secondary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm"
+              onClick={() => onBulk({ kind: "export", format: "ris" })}
+            >
+              <Download className="h-4 w-4" /> RIS
+            </button>
+            <button
+              type="button"
+              className="btn-secondary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm"
+              onClick={() => onBulk({ kind: "export", format: "bibtex" })}
+            >
+              <Braces className="h-4 w-4" /> BibTeX
             </button>
             <button
               type="button"

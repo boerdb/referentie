@@ -4,10 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
+import { ContextMenu, type MenuEntry } from "@/components/ui/ContextMenu";
 import { useToast } from "@/components/ui/Toaster";
 import { api } from "@/lib/api/client";
 import type { SessionPayload } from "@/lib/auth/session";
 import { formatBibtex } from "@/lib/cite/formats";
+import { CSL_STYLES } from "@/lib/cite/styles";
+import {
+  IMPORT_ACCEPT,
+  exportReferences,
+  importFile,
+  importFormatLabel,
+  type ExportFormat,
+} from "@/lib/library/exchange";
 import {
   useBulkAction,
   useDuplicateSets,
@@ -35,6 +44,7 @@ import { looksLikePdfFile } from "@/lib/uploads/is-pdf";
 import { cn } from "@/lib/utils";
 import { AddSheet, CommandPalette, DropOverlay, ReferenceForm } from "./dialogs";
 import { Inspector, type BulkRequest } from "./Inspector";
+import { groupOptions } from "./inspector/organize";
 import { useCitationCopy } from "./inspector/useCitationCopy";
 import { useExport } from "./inspector/useExport";
 import { PdfViewer } from "./PdfViewer";
@@ -47,7 +57,7 @@ import {
   type Density,
   type SortState,
 } from "./ReferenceTable";
-import { STATUS_LABEL, isDesktop } from "./shared";
+import { LabelPicker, STATUS_LABEL, isDesktop } from "./shared";
 import { DEFAULT_VIEW, Sidebar, type LibraryView } from "./Sidebar";
 import { SmartGroupDialog } from "./SmartGroupDialog";
 import { StatusBar, Toolbar, type ListMode } from "./Toolbar";
@@ -108,6 +118,10 @@ export function LibraryApp({ user }: Props) {
   const searchRef = useRef<HTMLInputElement>(null);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const exchangeFileRef = useRef<HTMLInputElement>(null);
+  const [exchangeImporting, setExchangeImporting] = useState(false);
+  /** Rechtsklikmenu op tabelrijen: positie en de artikelen waar het over gaat. */
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const pdfDropDepth = useRef(0);
 
   useEffect(() => {
@@ -250,7 +264,7 @@ export function LibraryApp({ user }: Props) {
         e.preventDefault();
         setPdfOpen((v) => !v);
       }
-      if (e.key === "c" && primary) void citation.copyCitation(primary.id, "apa");
+      if (e.key === "c" && primary) void citation.copyCitation(primary.id);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -285,7 +299,7 @@ export function LibraryApp({ user }: Props) {
     } else if (e.key === "Escape" && selectedItems.length > 1) {
       select(primary?.id ?? null);
     } else if (e.key === "c" && !mod && primary) {
-      void citation.copyCitation(primary.id, "apa");
+      void citation.copyCitation(primary.id);
     }
   }
 
@@ -363,13 +377,21 @@ export function LibraryApp({ user }: Props) {
     });
   }
 
-  async function runBulk(request: BulkRequest) {
-    const targets = multiSelection.length > 0 ? multiSelection : primary ? [primary] : [];
+  async function runBulk(request: BulkRequest, explicit?: ReferenceRecord[]) {
+    const targets = explicit ?? (multiSelection.length > 0 ? multiSelection : primary ? [primary] : []);
     if (targets.length === 0) return;
     const ids = targets.map((r) => r.id);
     const n = ids.length;
     const label = `${n} ${n === 1 ? "artikel" : "artikelen"}`;
 
+    if (request.kind === "bibliography") {
+      await citation.copyBibliography(ids);
+      return;
+    }
+    if (request.kind === "export") {
+      await exportList(ids, request.format);
+      return;
+    }
     if (request.kind === "bibtex") {
       const bib = targets.map(formatBibtex).join("\n\n");
       const result = await shareOrCopyText(bib, { title: `BibTeX (${label})` });
@@ -414,6 +436,139 @@ export function LibraryApp({ user }: Props) {
         },
       },
     );
+  }
+
+  async function exportList(ids: string[], format: ExportFormat) {
+    if (ids.length === 0) {
+      toast.info("Geen artikelen om te exporteren");
+      return;
+    }
+    try {
+      await exportReferences(ids, format);
+      toast.success(
+        `${ids.length} ${ids.length === 1 ? "artikel" : "artikelen"} geëxporteerd als ${format === "ris" ? "RIS" : "BibTeX"}`,
+      );
+    } catch (error) {
+      toast.error("Exporteren mislukt", error instanceof Error ? error.message : undefined);
+    }
+  }
+
+  async function importExchange(file: File) {
+    setExchangeImporting(true);
+    const groupId = currentGroup?.kind === "manual" ? currentGroup.id : null;
+    const res = await importFile(file, groupId);
+    setExchangeImporting(false);
+    if (!res.ok) {
+      toast.error("Importeren mislukt", `${file.name}: ${res.error}`);
+      return;
+    }
+    await invalidateLibrary();
+    const { created, skipped, failed, format } = res.data;
+    toast.success(
+      `${created} ${created === 1 ? "artikel" : "artikelen"} geïmporteerd (${importFormatLabel(format)})`,
+      [
+        skipped > 0 && `${skipped} overgeslagen (DOI stond er al)`,
+        failed > 0 && `${failed} niet gelukt`,
+        groupId && created > 0 && `toegevoegd aan ${currentGroup?.name}`,
+      ]
+        .filter(Boolean)
+        .join(" · ") || undefined,
+    );
+    if (res.data.ids[0]) {
+      if (view.trash || view.duplicates) changeView(DEFAULT_VIEW);
+      select(res.data.ids[0]);
+    }
+  }
+
+  /** Rechtsklik op een rij: niet-geselecteerde rij eerst selecteren, zoals in Finder. */
+  function openRowMenu(id: string, x: number, y: number) {
+    const ids = selectedIds.has(id) ? [...selectedIds] : [id];
+    if (!selectedIds.has(id)) setSelection({ ids: new Set([id]), primary: id, anchor: id });
+    setRowMenu({ x, y, ids });
+  }
+
+  function rowMenuEntries(ids: string[]): MenuEntry[] {
+    const targets = items.filter((i) => ids.includes(i.id));
+    if (targets.length === 0) return [];
+    const single = targets.length === 1 ? targets[0] : null;
+    const styleLabel = CSL_STYLES[citation.style].label;
+    const n = targets.length;
+    const bulk = (request: BulkRequest) => void runBulk(request, targets);
+
+    if (view.trash) {
+      return [
+        { label: n === 1 ? "Terugzetten" : `${n} artikelen terugzetten`, onSelect: () => (single ? restoreReference(single) : bulk({ kind: "restore" })) },
+        { kind: "separator" },
+        {
+          label: "Definitief verwijderen",
+          danger: true,
+          onSelect: () => (single ? void purgeReference(single) : bulk({ kind: "purge" })),
+        },
+      ];
+    }
+
+    const options = groupOptions(groups);
+    return [
+      ...(single?.hasPdf
+        ? [{ label: "PDF lezen", hint: "Spatie", onSelect: () => setPdfOpen(true) } as MenuEntry]
+        : []),
+      single
+        ? { label: `Citaat kopiëren (${styleLabel})`, hint: "C", onSelect: () => void citation.copyCitation(single.id) }
+        : { label: `Bibliografie kopiëren (${styleLabel})`, onSelect: () => bulk({ kind: "bibliography" }) },
+      { kind: "separator" },
+      {
+        label: single?.starred ? "Uit favorieten" : "Aan favorieten",
+        onSelect: () => bulk({ kind: "starred", starred: !(single?.starred ?? targets.every((t) => t.starred)) }),
+      },
+      {
+        kind: "custom",
+        render: (close) => (
+          <div className="px-2.5 py-1.5">
+            <p className="mb-1.5 text-xs text-[var(--text-muted)]">Label</p>
+            <LabelPicker
+              value={single?.label ?? null}
+              onChange={(label) => {
+                close();
+                bulkMutation.mutate(
+                  { action: "update", patch: { label }, ids },
+                  { onError: (error) => toast.error("Label niet gezet", error.message) },
+                );
+              }}
+            />
+          </div>
+        ),
+      },
+      {
+        label: "Aan groep toevoegen",
+        disabled: options.length === 0,
+        children: options.map((g) => ({ label: g.label, onSelect: () => dropOnGroup(g.id, ids) })),
+      },
+      ...(currentGroup?.kind === "manual"
+        ? [
+            {
+              label: "Uit deze groep halen",
+              onSelect: () =>
+                bulkMutation.mutate(
+                  { action: "group", groupId: currentGroup.id, remove: true, ids },
+                  {
+                    onError: (error) => toast.error("Uit groep halen mislukt", error.message),
+                    onSuccess: () => toast.success(`${n} ${n === 1 ? "artikel" : "artikelen"} uit ${currentGroup.name} gehaald`),
+                  },
+                ),
+            } as MenuEntry,
+          ]
+        : []),
+      { kind: "separator" },
+      { label: "Exporteren als RIS", onSelect: () => void exportList(ids, "ris") },
+      { label: "Exporteren als BibTeX", onSelect: () => void exportList(ids, "bibtex") },
+      { kind: "separator" },
+      {
+        label: n === 1 ? "Naar de prullenbak" : `${n} artikelen naar de prullenbak`,
+        hint: "Del",
+        danger: true,
+        onSelect: () => (single ? trashReference(single) : bulk({ kind: "trash" })),
+      },
+    ];
   }
 
   async function importDoi(doi: string) {
@@ -679,6 +834,18 @@ export function LibraryApp({ user }: Props) {
         }}
       />
 
+      <input
+        ref={exchangeFileRef}
+        type="file"
+        accept={IMPORT_ACCEPT}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void importExchange(file);
+        }}
+      />
+
       <Toolbar
         query={query}
         field={field}
@@ -698,10 +865,19 @@ export function LibraryApp({ user }: Props) {
         onTogglePdf={() => setPdfOpen(!showPdf)}
         onNew={openAdd}
         onShare={() => {
-          if (multiSelection.length > 0) void runBulk({ kind: "bibtex" });
+          if (multiSelection.length > 0) void runBulk({ kind: "bibliography" });
           else if (primary) void exporter.exportReference(primary, primary.hasPdf ? "pdf" : "summary");
         }}
         onOpenPalette={() => setPaletteOpen(true)}
+        importing={exchangeImporting}
+        onImport={() => exchangeFileRef.current?.click()}
+        onExport={(format) =>
+          void exportList(
+            (multiSelection.length > 0 ? multiSelection : items).map((i) => i.id),
+            format,
+          )
+        }
+        exportCount={multiSelection.length > 0 ? multiSelection.length : items.length}
       />
 
       <div
@@ -832,6 +1008,7 @@ export function LibraryApp({ user }: Props) {
                     select(id);
                     if (items.find((i) => i.id === id)?.hasPdf) setPdfOpen(true);
                   }}
+                  onRowContextMenu={openRowMenu}
                   onKeyDown={onTableKey}
                 />
               ) : (
@@ -902,11 +1079,21 @@ export function LibraryApp({ user }: Props) {
           onImportDoi={(doi) => void importDoi(doi)}
           onNew={() => setFormOpen(true)}
           onCopyApa={() => {
-            if (primary) void citation.copyCitation(primary.id, "apa");
+            if (primary) void citation.copyCitation(primary.id);
           }}
+          onImportFile={() => exchangeFileRef.current?.click()}
+          styleLabel={CSL_STYLES[citation.style].label}
           onExport={(mode) => {
             if (primary) void exporter.exportReference(primary, mode);
           }}
+        />
+      )}
+      {rowMenu && (
+        <ContextMenu
+          x={rowMenu.x}
+          y={rowMenu.y}
+          entries={rowMenuEntries(rowMenu.ids)}
+          onClose={() => setRowMenu(null)}
         />
       )}
       {smartDialog && (
@@ -925,6 +1112,7 @@ export function LibraryApp({ user }: Props) {
           onUploadPdf={() => importFileRef.current?.click()}
           onDoi={() => setPaletteOpen(true)}
           onManual={() => setFormOpen(true)}
+          onImportFile={() => exchangeFileRef.current?.click()}
         />
       )}
       {formOpen && (

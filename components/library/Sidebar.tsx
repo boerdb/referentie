@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ThemeSelector } from "@/components/theme/ThemeSelector";
+import { ContextMenu } from "@/components/ui/ContextMenu";
 import { BrandMark } from "@/components/ui/BrandMark";
 import type { SessionPayload } from "@/lib/auth/session";
 import { usePref } from "@/lib/library/prefs";
@@ -453,6 +454,7 @@ function SourceItem({
 }) {
   const [dropping, setDropping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [contextAt, setContextAt] = useState<{ x: number; y: number } | null>(null);
 
   return (
     <div
@@ -464,6 +466,15 @@ function SourceItem({
         dropping && "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]",
       )}
       style={{ paddingLeft: depth * 14 }}
+      onContextMenu={
+        menu
+          ? (e) => {
+              e.preventDefault();
+              setMenuOpen(false);
+              setContextAt({ x: e.clientX, y: e.clientY });
+            }
+          : undefined
+      }
       onDragOver={
         onDropIds
           ? (e) => {
@@ -545,6 +556,14 @@ function SourceItem({
         </button>
       )}
       {menuOpen && menu && <ItemMenu items={menu} onClose={() => setMenuOpen(false)} />}
+      {contextAt && menu && (
+        <ContextMenu
+          x={contextAt.x}
+          y={contextAt.y}
+          entries={menu.map((item) => ({ label: item.label, onSelect: item.onClick, danger: item.danger }))}
+          onClose={() => setContextAt(null)}
+        />
+      )}
     </div>
   );
 }

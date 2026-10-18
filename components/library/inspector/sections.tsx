@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Braces, Check, Copy, ExternalLink, FileText, Plus, RefreshCw, Share2, Upload } from "lucide-react";
 import { useToast } from "@/components/ui/Toaster";
 import { api } from "@/lib/api/client";
@@ -14,10 +15,9 @@ import {
 import type { ReferenceRecord } from "@/lib/references/types";
 import { cn } from "@/lib/utils";
 import { DetailSection } from "../shared";
-import type { CiteStyleId } from "./useCitationCopy";
+import { CSL_STYLES, CSL_STYLE_IDS } from "@/lib/cite/styles";
+import { useCiteStyle, type CiteStyleId } from "./useCitationCopy";
 import type { ExportMode } from "./useExport";
-
-const CITE_STYLES: CiteStyleId[] = ["apa", "mla", "chicago"];
 
 export function CiteSection({
   reference,
@@ -32,36 +32,45 @@ export function CiteSection({
   onCopy: (style: CiteStyleId) => void;
   onExport: (mode: ExportMode) => void;
 }) {
+  const [style, setStyle] = useCiteStyle();
+  // Voorbeeld in de gekozen stijl; opnieuw ophalen als het artikel wijzigt.
+  const preview = useQuery({
+    queryKey: ["cite", reference.id, style, reference.updatedAt],
+    queryFn: async () => {
+      const res = await api<{ citation: string }>(`/api/cite/${reference.id}?style=${style}`);
+      if (!res.ok) throw new Error(res.error);
+      return res.data.citation;
+    },
+    staleTime: Infinity,
+  });
+
   return (
     <DetailSection title="Citeren">
-      <div className="flex flex-wrap gap-2 text-sm">
-        <div className="inline-flex overflow-hidden rounded-lg border border-[var(--border-strong)] shadow-[var(--shadow-soft)]">
-          {CITE_STYLES.map((s, i) => {
-            const copied = citeCopied?.toUpperCase().startsWith(s.toUpperCase());
-            return (
-              <button
-                key={s}
-                type="button"
-                title={`${s.toUpperCase()}-citaat kopiëren`}
-                className={cn(
-                  "btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold tracking-wide uppercase max-lg:min-h-11",
-                  i > 0 && "border-l border-[var(--border-strong)]",
-                  copied
-                    ? "!bg-[var(--accent-soft)] !text-[var(--accent)]"
-                    : "bg-[var(--bg-elevated)] !text-[var(--text)] hover:bg-[var(--bg-hover)]",
-                )}
-                onClick={() => onCopy(s)}
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5 opacity-60" />
-                )}
-                {s}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <select
+          value={style}
+          onChange={(e) => setStyle(e.target.value as CiteStyleId)}
+          aria-label="Citeerstijl"
+          className="input rounded-lg px-2.5 py-1.5 text-xs font-medium max-lg:min-h-11"
+        >
+          {CSL_STYLE_IDS.map((id) => (
+            <option key={id} value={id}>
+              {CSL_STYLES[id].label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium max-lg:min-h-11",
+            citeCopied ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "btn-primary",
+          )}
+          onClick={() => onCopy(style)}
+          title="Opgemaakt kopiëren (c)"
+        >
+          {citeCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          Kopiëren
+        </button>
         <button
           type="button"
           disabled={exporting}
@@ -84,13 +93,25 @@ export function CiteSection({
         </button>
       </div>
       <p
+        className="mt-3 rounded-lg bg-[var(--bg-subtle)] px-3 py-2.5 font-serif text-[0.875rem] leading-relaxed text-[var(--text)] select-text"
+        aria-live="polite"
+      >
+        {preview.isPending ? (
+          <span className="text-[var(--text-subtle)]">Opmaken…</span>
+        ) : preview.isError ? (
+          <span className="text-[var(--danger)]">Kon niet opmaken in deze stijl.</span>
+        ) : (
+          preview.data
+        )}
+      </p>
+      <p
         className={cn(
           "mt-2 text-xs",
           citeCopied ? "font-medium text-[var(--success)]" : "text-[var(--text-subtle)]",
         )}
         role="status"
       >
-        {citeCopied ?? "Klik op een stijl om het citaat naar het klembord te kopiëren."}
+        {citeCopied ?? "Kopiëren neemt de opmaak mee (cursief, nummering) voor Word en Pages."}
       </p>
     </DetailSection>
   );

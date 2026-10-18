@@ -104,6 +104,8 @@ type Props = {
   onWidthsChange: (widths: Partial<Record<ColumnId, number>>) => void;
   onRowClick: (id: string, mods: { range: boolean; toggle: boolean }) => void;
   onRowOpen: (id: string) => void;
+  /** Rechtsklik op een rij (positie voor het contextmenu). */
+  onRowContextMenu: (id: string, x: number, y: number) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
 };
 
@@ -122,6 +124,7 @@ export function ReferenceTable({
   onWidthsChange,
   onRowClick,
   onRowOpen,
+  onRowContextMenu,
   onKeyDown,
 }: Props) {
   // Tijdens het slepen lokaal bijhouden; pas bij loslaten opslaan.
@@ -295,6 +298,10 @@ export function ReferenceTable({
               onRowClick(item.id, { range: e.shiftKey, toggle: e.ctrlKey || e.metaKey })
             }
             onDoubleClick={() => onRowOpen(item.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onRowContextMenu(item.id, e.clientX, e.clientY);
+            }}
             draggable
             onDragStart={(e) => {
               // Selectie (of alleen deze rij) naar een groep in de zijbalk slepen.

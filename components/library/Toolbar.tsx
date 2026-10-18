@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import {
   BookOpenText,
   Command,
+  Download,
+  FileUp,
+  Loader2,
   LayoutList,
   PanelLeft,
   PanelRight,
@@ -12,6 +16,7 @@ import {
   Table2,
   X,
 } from "lucide-react";
+import { ContextMenu } from "@/components/ui/ContextMenu";
 import type { SearchField } from "@/lib/library/hooks";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +50,11 @@ type Props = {
   onNew: () => void;
   onShare: () => void;
   onOpenPalette: () => void;
+  importing: boolean;
+  onImport: () => void;
+  onExport: (format: "ris" | "bibtex") => void;
+  /** Aantal artikelen dat geëxporteerd wordt (selectie, anders de hele lijst). */
+  exportCount: number;
 };
 
 /** Werkbalk over de volle breedte, alleen op desktop (Bookends-stijl). */
@@ -61,6 +71,7 @@ export function Toolbar(props: Props) {
     canOpenPdf,
     trash,
   } = props;
+  const [exportMenu, setExportMenu] = useState<{ x: number; y: number } | null>(null);
 
   return (
     <div className="hidden h-12 shrink-0 items-center gap-1.5 border-b border-[var(--border)] bg-[var(--bg-subtle)] px-2.5 lg:flex">
@@ -130,9 +141,47 @@ export function Toolbar(props: Props) {
       >
         <BookOpenText className="h-4 w-4" />
       </ToolButton>
-      <ToolButton label="Delen of exporteren" disabled={!canShare} onClick={props.onShare}>
+      <ToolButton label="Delen" disabled={!canShare} onClick={props.onShare}>
         <Share2 className="h-4 w-4" />
       </ToolButton>
+      <ToolButton
+        label={`Exporteren (${props.exportCount} artikelen)`}
+        disabled={props.exportCount === 0}
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setExportMenu({ x: rect.left, y: rect.bottom + 4 });
+        }}
+      >
+        <Download className="h-4 w-4" />
+      </ToolButton>
+      {!trash && (
+        <ToolButton
+          label="Bestand importeren (RIS, BibTeX, PubMed)"
+          disabled={props.importing}
+          onClick={props.onImport}
+        >
+          {props.importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+        </ToolButton>
+      )}
+      {exportMenu && (
+        <ContextMenu
+          x={exportMenu.x}
+          y={exportMenu.y}
+          onClose={() => setExportMenu(null)}
+          entries={[
+            {
+              kind: "custom",
+              render: () => (
+                <p className="px-2.5 pt-1 pb-1.5 text-xs text-[var(--text-muted)]">
+                  {props.exportCount} {props.exportCount === 1 ? "artikel" : "artikelen"} exporteren
+                </p>
+              ),
+            },
+            { label: "RIS (EndNote, Zotero, Mendeley)", onSelect: () => props.onExport("ris") },
+            { label: "BibTeX (LaTeX, Overleaf)", onSelect: () => props.onExport("bibtex") },
+          ]}
+        />
+      )}
       {!trash && (
         <button
           type="button"
@@ -160,7 +209,7 @@ function ToolButton({
   label: string;
   active?: boolean;
   disabled?: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }) {
   return (

@@ -3,52 +3,64 @@
 import { useState } from "react";
 import { useToast } from "@/components/ui/Toaster";
 import { api } from "@/lib/api/client";
-import { shareOrCopyText } from "@/lib/share/files";
+import { usePref } from "@/lib/library/prefs";
+import { CSL_STYLES, type CslStyleId } from "@/lib/cite/styles";
+import { copyRichText, shareOrCopyText } from "@/lib/share/files";
 
-export type CiteStyleId = "apa" | "mla" | "chicago";
+export type CiteStyleId = CslStyleId;
 
-/** Haalt een citaat op en zet het op het klembord (met share-sheet als laatste redmiddel op iOS). */
+/** Gekozen citeerstijl, per browser onthouden. Vancouver past bij medische tijdschriften. */
+export function useCiteStyle() {
+  return usePref<CslStyleId>("citeStyle", "vancouver");
+}
+
+/** Haalt een citaat of bibliografie op en zet het opgemaakt op het klembord. */
 export function useCitationCopy() {
   const toast = useToast();
+  const [style] = useCiteStyle();
   const [citeCopied, setCiteCopied] = useState<string | null>(null);
 
-  async function copyCitation(id: string, style: CiteStyleId) {
-    const res = await api<{ citation?: string }>(`/api/cite/${id}?style=${style}`);
+  async function copy(html: string, text: string, label: string) {
+    const copied = await copyRichText(html, text);
+    if (copied) {
+      setCiteCopied(`${label} gekopieerd — plak waar je wilt`);
+    } else {
+      // Laatste redmiddel op iOS: share-sheet met de platte tekst.
+      const result = await shareOrCopyText(text, { title: label });
+      setCiteCopied(result === "shared" ? `${label} gedeeld` : `${label} gekopieerd`);
+    }
+    window.setTimeout(() => setCiteCopied(null), 3500);
+  }
+
+  async function copyCitation(id: string, styleId: CslStyleId = style) {
+    const res = await api<{ citation?: string; html?: string }>(`/api/cite/${id}?style=${styleId}`);
     if (!res.ok || !res.data.citation) {
       toast.error("Citaat ophalen mislukt", res.ok ? undefined : res.error);
       return;
     }
-    const citation = res.data.citation;
-    const label = style.toUpperCase();
+    await copy(res.data.html ?? res.data.citation, res.data.citation, CSL_STYLES[styleId].label);
+  }
 
-    let copied = false;
-    try {
-      await navigator.clipboard.writeText(citation);
-      copied = true;
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = citation;
-      ta.setAttribute("readonly", "");
-      ta.style.position = "fixed";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      copied = document.execCommand("copy");
-      ta.remove();
+  /** Bibliografie van een selectie, in de volgorde van de lijst. */
+  async function copyBibliography(ids: string[], styleId: CslStyleId = style) {
+    const res = await api<{ text: string; html: string; entries: string[] }>("/api/cite", {
+      method: "POST",
+      body: { ids, style: styleId },
+    });
+    if (!res.ok) {
+      toast.error("Bibliografie maken mislukt", res.error);
+      return;
     }
-
-    try {
-      if (copied) {
-        setCiteCopied(`${label} gekopieerd — plak waar je wilt`);
-      } else {
-        const result = await shareOrCopyText(citation, { title: `${label}-citaat` });
-        setCiteCopied(result === "shared" ? `${label} gedeeld` : `${label} gekopieerd`);
-      }
-      window.setTimeout(() => setCiteCopied(null), 3500);
-    } catch {
-      toast.error("Citaat kopiëren mislukt");
+    const copied = await copyRichText(res.data.html, res.data.text);
+    if (copied) {
+      toast.success(
+        `Bibliografie gekopieerd (${CSL_STYLES[styleId].label})`,
+        `${res.data.entries.length} bronnen — plak in Word, Pages of een e-mail.`,
+      );
+    } else {
+      await shareOrCopyText(res.data.text, { title: "Bibliografie" });
     }
   }
 
-  return { citeCopied, copyCitation };
+  return { citeCopied, copyCitation, copyBibliography, style };
 }
