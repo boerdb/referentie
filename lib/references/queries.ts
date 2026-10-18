@@ -1,6 +1,8 @@
 import { randomUUID } from "crypto";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getPool, withTransaction } from "@/lib/db/mysql";
+import { smartRulesToSql, type SmartRules } from "./smart";
+import { loadTagsFor, setReferenceTags } from "./tags";
 import type { AuthorInput, ReferenceCounts, ReferenceInput, ReferenceRecord } from "./types";
 
 type RefRow = RowDataPacket & {
@@ -21,6 +23,7 @@ type RefRow = RowDataPacket & {
   status: "unread" | "reading" | "read";
   starred: number;
   deleted_at: Date | null;
+  label: number | null;
   created_at: Date;
   updated_at: Date;
   has_pdf: number;
@@ -36,7 +39,9 @@ type AuthorRow = RowDataPacket & {
 /** Pool of transactieverbinding: beide hebben `query`. */
 type Db = Pick<PoolConnection, "query">;
 
-function mapRow(row: RefRow, authors: AuthorRow[]): ReferenceRecord {
+type Extras = { tags: string[]; groupIds: string[] };
+
+function mapRow(row: RefRow, authors: AuthorRow[], extras: Extras): ReferenceRecord {
   return {
     id: row.id,
     userId: row.user_id,
@@ -55,6 +60,9 @@ function mapRow(row: RefRow, authors: AuthorRow[]): ReferenceRecord {
     status: row.status,
     starred: Boolean(row.starred),
     deletedAt: row.deleted_at ? row.deleted_at.toISOString() : null,
+    label: row.label ?? null,
+    tags: extras.tags,
+    groupIds: extras.groupIds,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     hasPdf: Boolean(row.has_pdf),
@@ -88,6 +96,38 @@ async function loadAuthorsFor(
     else byRef.set(row.reference_id, [row]);
   }
   return byRef;
+}
+
+/** Handmatige groepen per referentie-id. */
+async function loadGroupIdsFor(referenceIds: string[]): Promise<Map<string, string[]>> {
+  const byRef = new Map<string, string[]>();
+  if (referenceIds.length === 0) return byRef;
+  const [rows] = await getPool().query<RowDataPacket[]>(
+    "SELECT reference_id, group_id FROM group_items WHERE reference_id IN (?)",
+    [referenceIds],
+  );
+  for (const row of rows) {
+    const list = byRef.get(row.reference_id as string);
+    if (list) list.push(row.group_id as string);
+    else byRef.set(row.reference_id as string, [row.group_id as string]);
+  }
+  return byRef;
+}
+
+/** Rijen omzetten met auteurs, trefwoorden en groepen, elk in één query. */
+async function mapRows(rows: RefRow[]): Promise<ReferenceRecord[]> {
+  const ids = rows.map((row) => row.id);
+  const [authors, tags, groups] = await Promise.all([
+    loadAuthorsFor(ids),
+    loadTagsFor(ids),
+    loadGroupIdsFor(ids),
+  ]);
+  return rows.map((row) =>
+    mapRow(row, authors.get(row.id) ?? [], {
+      tags: tags.get(row.id) ?? [],
+      groupIds: groups.get(row.id) ?? [],
+    }),
+  );
 }
 
 /** Referentie met de eerste bijlage, zonder gecorreleerde subqueries per rij. */
@@ -172,6 +212,14 @@ export type ListFilters = {
   trash?: boolean;
   /** Waarin gezocht wordt; standaard overal. */
   field?: SearchField;
+  /** Alleen artikelen uit deze handmatige groep. */
+  groupId?: string;
+  /** Regels van een slimme groep. */
+  smart?: SmartRules;
+  tagId?: string;
+  label?: number;
+  /** Alleen deze id's (bijv. dubbelen). */
+  ids?: string[];
 };
 
 export const SEARCH_FIELDS = ["all", "title", "author", "journal", "doi"] as const;
@@ -203,6 +251,28 @@ export async function listReferences(
   }
   if (filters.hasPdf) {
     where.push("att.attachment_id IS NOT NULL");
+  }
+  if (filters.groupId) {
+    where.push("EXISTS (SELECT 1 FROM group_items gi WHERE gi.group_id = ? AND gi.reference_id = r.id)");
+    params.push(filters.groupId);
+  }
+  if (filters.smart) {
+    const smart = smartRulesToSql(filters.smart);
+    where.push(smart.sql);
+    params.push(...smart.params);
+  }
+  if (filters.tagId) {
+    where.push("EXISTS (SELECT 1 FROM reference_tags rt WHERE rt.tag_id = ? AND rt.reference_id = r.id)");
+    params.push(filters.tagId);
+  }
+  if (filters.label) {
+    where.push("r.label = ?");
+    params.push(filters.label);
+  }
+  if (filters.ids) {
+    if (filters.ids.length === 0) return [];
+    where.push("r.id IN (?)");
+    params.push(filters.ids);
   }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
@@ -241,8 +311,17 @@ export async function listReferences(
     params,
   );
 
-  const authors = await loadAuthorsFor(rows.map((row) => row.id));
-  return rows.map((row) => mapRow(row, authors.get(row.id) ?? []));
+  return mapRows(rows);
+}
+
+/** Aantal (niet-verwijderde) artikelen dat aan slimme regels voldoet. */
+export async function countSmart(userId: string, rules: SmartRules): Promise<number> {
+  const smart = smartRulesToSql(rules);
+  const [rows] = await getPool().query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS n FROM ref_items r WHERE r.user_id = ? AND r.deleted_at IS NULL AND ${smart.sql}`,
+    [userId, ...smart.params],
+  );
+  return Number(rows[0]?.n ?? 0);
 }
 
 function escapeLike(value: string): string {
@@ -276,6 +355,7 @@ export async function countReferences(userId: string): Promise<ReferenceCounts> 
     starred: n(row.starred),
     hasPdf: n(row.has_pdf),
     trash: n(row.trash),
+    duplicates: 0,
   };
 }
 
@@ -292,8 +372,7 @@ export async function getReference(
   );
   const row = rows[0];
   if (!row) return null;
-  const authors = await loadAuthorsFor([row.id]);
-  return mapRow(row, authors.get(row.id) ?? []);
+  return (await mapRows([row]))[0];
 }
 
 /** Zoekt op DOI, ook in de prullenbak (zodat een nieuwe import die kan terugzetten). */
@@ -311,8 +390,7 @@ export async function getReferenceByDoi(
   );
   const row = rows[0];
   if (!row) return null;
-  const authors = await loadAuthorsFor([row.id]);
-  return mapRow(row, authors.get(row.id) ?? []);
+  return (await mapRows([row]))[0];
 }
 
 /** DOI (lowercase) → referentie-id, voor kruisverwijzingen die al in de bibliotheek staan. */
@@ -346,8 +424,8 @@ export async function createReference(
     await conn.query(
       `INSERT INTO ref_items (
         id, user_id, type, title, abstract, year, journal, volume, issue, pages,
-        doi, url, pmid, cite_key, status, starred
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        doi, url, pmid, cite_key, status, starred, label
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         userId,
@@ -365,9 +443,11 @@ export async function createReference(
         input.citeKey?.trim() || null,
         input.status ?? "unread",
         input.starred ? 1 : 0,
+        input.label ?? null,
       ],
     );
     if (input.authors?.length) await setReferenceAuthors(conn, id, input.authors);
+    if (input.tags?.length) await setReferenceTags(conn, userId, id, input.tags);
   });
   const ref = await getReference(userId, id);
   if (!ref) throw new Error("Reference not found after insert");
@@ -408,6 +488,7 @@ export async function updateReference(
   if (input.status) set("status", input.status);
   if (input.starred !== undefined && input.starred !== null) set("starred", input.starred ? 1 : 0);
   if (input.year !== undefined) set("year", input.year);
+  if (input.label !== undefined) set("label", input.label);
   for (const [key, column] of Object.entries(NULLABLE_TEXT) as [
     keyof typeof NULLABLE_TEXT,
     string,
@@ -430,6 +511,7 @@ export async function updateReference(
       ]);
     }
     if (input.authors) await setReferenceAuthors(conn, id, input.authors);
+    if (input.tags) await setReferenceTags(conn, userId, id, input.tags);
     return true;
   });
   return found ? getReference(userId, id) : null;

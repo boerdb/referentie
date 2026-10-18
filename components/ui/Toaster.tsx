@@ -28,6 +28,16 @@ type ConfirmInput = {
 
 type ConfirmState = ConfirmInput & { resolve: (ok: boolean) => void };
 
+type PromptInput = {
+  title: string;
+  label: string;
+  initial?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+};
+
+type PromptState = PromptInput & { resolve: (value: string | null) => void };
+
 type ToastApi = {
   show: (toast: ToastInput) => void;
   success: (message: string, description?: string) => void;
@@ -35,6 +45,8 @@ type ToastApi = {
   info: (message: string, description?: string) => void;
   /** Vervangt window.confirm met een dialoog in de stijl van de app. */
   confirm: (input: ConfirmInput) => Promise<boolean>;
+  /** Vraagt om één regel tekst; `null` bij annuleren. */
+  prompt: (input: PromptInput) => Promise<string | null>;
 };
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -55,6 +67,7 @@ const ICON_COLOR = {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [promptState, setPromptState] = useState<PromptState | null>(null);
   const nextId = useRef(1);
 
   const dismiss = useCallback((id: number) => {
@@ -74,12 +87,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const prompt = useCallback(
+    (input: PromptInput) =>
+      new Promise<string | null>((resolve) => setPromptState({ ...input, resolve })),
+    [],
+  );
+
   const [api] = useState<ToastApi>(() => ({
     show,
     success: (message, description) => show({ message, description, kind: "success" }),
     error: (message, description) => show({ message, description, kind: "error" }),
     info: (message, description) => show({ message, description, kind: "info" }),
     confirm,
+    prompt,
   }));
 
   function closeConfirm(ok: boolean) {
@@ -102,6 +122,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       </div>
       {confirmState && (
         <ConfirmDialog state={confirmState} onClose={closeConfirm} />
+      )}
+      {promptState && (
+        <PromptDialog
+          state={promptState}
+          onClose={(value) => {
+            promptState.resolve(value);
+            setPromptState(null);
+          }}
+        />
       )}
     </ToastContext.Provider>
   );
@@ -220,6 +249,71 @@ function ConfirmDialog({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PromptDialog({
+  state,
+  onClose,
+}: {
+  state: PromptState;
+  onClose: (value: string | null) => void;
+}) {
+  const [value, setValue] = useState(state.initial ?? "");
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-lg:items-end max-lg:p-0"
+      style={{ background: "var(--overlay)" }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose(null);
+      }}
+    >
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="prompt-title"
+        className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-5 shadow-[var(--shadow-lg)] max-lg:max-w-none max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (value.trim()) onClose(value.trim());
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose(null);
+        }}
+      >
+        <h2 id="prompt-title" className="text-base font-semibold">
+          {state.title}
+        </h2>
+        <label className="mt-3 block space-y-1.5">
+          <span className="text-sm text-[var(--text-muted)]">{state.label}</span>
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={state.placeholder}
+            maxLength={255}
+            className="input w-full rounded-lg px-3 py-2 text-sm max-lg:min-h-11"
+          />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            className="btn-secondary rounded-lg px-3.5 py-2 text-sm max-lg:min-h-11 max-lg:flex-1"
+            onClick={() => onClose(null)}
+          >
+            Annuleren
+          </button>
+          <button
+            type="submit"
+            disabled={!value.trim()}
+            className="btn-primary rounded-lg px-3.5 py-2 text-sm max-lg:min-h-11 max-lg:flex-1"
+          >
+            {state.confirmLabel ?? "Opslaan"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -1,12 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Circle, Columns3, FileText, Star } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Columns3, FileText, Palette, Star } from "lucide-react";
 import type { ReferenceRecord } from "@/lib/references/types";
 import { cn } from "@/lib/utils";
-import { STATUS_LABEL, StatusDot, authorShort } from "./shared";
+import { DRAG_MIME, LabelDot, STATUS_LABEL, StatusDot, authorShort } from "./shared";
 
-export type ColumnId = "starred" | "author" | "year" | "title" | "journal" | "status" | "pdf" | "added";
+export type ColumnId =
+  | "starred"
+  | "label"
+  | "author"
+  | "year"
+  | "title"
+  | "journal"
+  | "tags"
+  | "status"
+  | "pdf"
+  | "added";
 export type SortState = { column: ColumnId; dir: "asc" | "desc" } | null;
 export type Density = "compact" | "comfortable";
 
@@ -25,6 +35,7 @@ type Column = {
 
 export const COLUMNS: Column[] = [
   { id: "starred", label: "Favoriet", width: 30, min: 30, align: "center", sortValue: (r) => (r.starred ? 0 : 1) },
+  { id: "label", label: "Label", width: 26, min: 26, align: "center", sortValue: (r) => r.label ?? null },
   {
     id: "author",
     label: "Auteur",
@@ -42,6 +53,13 @@ export const COLUMNS: Column[] = [
     sortValue: (r) => r.journal?.toLocaleLowerCase("nl") || null,
   },
   {
+    id: "tags",
+    label: "Trefwoorden",
+    width: 140,
+    min: 80,
+    sortValue: (r) => r.tags[0]?.toLocaleLowerCase("nl") ?? null,
+  },
+  {
     id: "status",
     label: "Status",
     width: 34,
@@ -53,7 +71,7 @@ export const COLUMNS: Column[] = [
   { id: "added", label: "Toegevoegd", width: 96, min: 80, align: "right", sortValue: (r) => r.createdAt },
 ];
 
-export const DEFAULT_COLUMNS: ColumnId[] = ["starred", "author", "year", "title", "journal", "status", "pdf"];
+export const DEFAULT_COLUMNS: ColumnId[] = ["starred", "label", "author", "year", "title", "journal", "status", "pdf"];
 
 /** Sorteert een kopie; zonder sortering blijft de volgorde van de server (laatst gewijzigd). */
 export function sortReferences(items: ReferenceRecord[], sort: SortState): ReferenceRecord[] {
@@ -195,6 +213,8 @@ export function ReferenceTable({
                 <Star className="h-3.5 w-3.5" aria-label="Favoriet" />
               ) : c.id === "status" ? (
                 <Circle className="h-3 w-3" aria-label="Leesstatus" />
+              ) : c.id === "label" ? (
+                <Palette className="h-3.5 w-3.5" aria-label="Label" />
               ) : c.id === "pdf" ? (
                 <FileText className="h-3.5 w-3.5" aria-label="PDF" />
               ) : (
@@ -275,6 +295,14 @@ export function ReferenceTable({
               onRowClick(item.id, { range: e.shiftKey, toggle: e.ctrlKey || e.metaKey })
             }
             onDoubleClick={() => onRowOpen(item.id)}
+            draggable
+            onDragStart={(e) => {
+              // Selectie (of alleen deze rij) naar een groep in de zijbalk slepen.
+              const ids = selected ? [...selectedIds] : [item.id];
+              e.dataTransfer.setData(DRAG_MIME, JSON.stringify(ids));
+              e.dataTransfer.setData("text/plain", ids.length === 1 ? item.title : `${ids.length} artikelen`);
+              e.dataTransfer.effectAllowed = "copy";
+            }}
             className={cn(
               "grid cursor-default items-center border-b border-transparent select-none",
               rowHeight,
@@ -318,6 +346,10 @@ function Cell({ column, item }: { column: ColumnId; item: ReferenceRecord }) {
       return item.starred ? (
         <Star className="h-3.5 w-3.5 fill-[var(--star)] text-[var(--star)]" aria-label="Favoriet" />
       ) : null;
+    case "label":
+      return <LabelDot label={item.label} />;
+    case "tags":
+      return <>{item.tags.join(", ")}</>;
     case "author":
       return <>{authorShort(item.authors) ?? "—"}</>;
     case "year":

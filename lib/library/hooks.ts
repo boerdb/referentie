@@ -8,7 +8,14 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { api, type ApiResult } from "@/lib/api/client";
-import type { ReferenceCounts, ReferenceRecord, RefStatus } from "@/lib/references/types";
+import type { SmartRules } from "@/lib/references/smart";
+import type {
+  GroupRecord,
+  ReferenceCounts,
+  ReferenceRecord,
+  RefStatus,
+  TagRecord,
+} from "@/lib/references/types";
 
 export type SearchField = "all" | "title" | "author" | "journal" | "doi";
 
@@ -19,6 +26,11 @@ export type ListParams = {
   starred: boolean;
   hasPdf: boolean;
   trash: boolean;
+  /** Handmatige of slimme groep. */
+  group: string | null;
+  tag: string | null;
+  label: number | null;
+  duplicates: boolean;
 };
 
 export type Highlight = { id: string; page: number; quote: string | null; color: string };
@@ -28,6 +40,9 @@ export const libraryKeys = {
   lists: ["references", "list"] as const,
   list: (params: ListParams) => ["references", "list", params] as const,
   counts: ["references", "counts"] as const,
+  groups: ["references", "groups"] as const,
+  tags: ["references", "tags"] as const,
+  duplicates: ["references", "duplicates"] as const,
   highlights: (attachmentId: string) => ["highlights", attachmentId] as const,
 };
 
@@ -55,6 +70,10 @@ function listUrl(params: ListParams): string {
   if (params.starred) search.set("starred", "1");
   if (params.hasPdf) search.set("hasPdf", "1");
   if (params.trash) search.set("trash", "1");
+  if (params.group) search.set("group", params.group);
+  if (params.tag) search.set("tag", params.tag);
+  if (params.label) search.set("label", String(params.label));
+  if (params.duplicates) search.set("duplicates", "1");
   return `/api/references?${search}`;
 }
 
@@ -121,7 +140,7 @@ export function useInvalidateLibrary() {
   return () => client.invalidateQueries({ queryKey: libraryKeys.references });
 }
 
-export type ReferencePatch = Partial<Pick<ReferenceRecord, "starred" | "status">> & {
+export type ReferencePatch = Partial<Pick<ReferenceRecord, "starred" | "status" | "label" | "tags">> & {
   doi?: string | null;
 };
 
@@ -218,7 +237,9 @@ export function useAddHighlight() {
 }
 
 export type BulkAction =
-  | { action: "update"; patch: Partial<Pick<ReferenceRecord, "starred" | "status">> }
+  | { action: "update"; patch: Partial<Pick<ReferenceRecord, "starred" | "status" | "label">> }
+  | { action: "tag"; tag: string; remove?: boolean }
+  | { action: "group"; groupId: string; remove?: boolean }
   | { action: "trash" }
   | { action: "restore" }
   | { action: "purge" };
@@ -239,9 +260,70 @@ export function useBulkAction() {
           list.map((i) => (ids.has(i.id) ? { ...i, ...vars.patch } : i)),
         );
       }
+      // Trefwoord en groep: de lijst wordt na afloop opnieuw opgehaald.
+      if (vars.action === "tag" || vars.action === "group") return undefined;
       return updateLists(client, (list) => list.filter((i) => !ids.has(i.id)));
     },
     onError: (_error, _vars, snapshot) => restoreLists(client, snapshot),
     onSettled: () => client.invalidateQueries({ queryKey: libraryKeys.references }),
   });
+}
+
+export function useGroups() {
+  return useQuery({
+    queryKey: libraryKeys.groups,
+    queryFn: () => unwrap(api<{ groups: GroupRecord[] }>("/api/groups")).then((d) => d.groups),
+  });
+}
+
+export function useTags() {
+  return useQuery({
+    queryKey: libraryKeys.tags,
+    queryFn: () => unwrap(api<{ tags: TagRecord[] }>("/api/tags")).then((d) => d.tags),
+  });
+}
+
+export function useDuplicateSets(enabled: boolean) {
+  return useQuery({
+    queryKey: libraryKeys.duplicates,
+    queryFn: () => unwrap(api<{ sets: string[][] }>("/api/duplicates")).then((d) => d.sets),
+    enabled,
+  });
+}
+
+/** Groepen en trefwoorden aanmaken, wijzigen en verwijderen; daarna alles opnieuw ophalen. */
+export function useOrganize() {
+  const client = useQueryClient();
+  const settle = () => client.invalidateQueries({ queryKey: libraryKeys.references });
+  const createGroup = useMutation({
+    mutationFn: (input: { name: string; kind: "manual" | "smart"; parentId?: string | null; rules?: SmartRules }) =>
+      unwrap(api<{ id: string }>("/api/groups", { method: "POST", body: input })).then((d) => d.id),
+    onSettled: settle,
+  });
+  const updateGroup = useMutation({
+    mutationFn: ({ id, ...input }: { id: string; name?: string; parentId?: string | null; rules?: SmartRules }) =>
+      unwrap(api(`/api/groups/${id}`, { method: "PATCH", body: input })),
+    onSettled: settle,
+  });
+  const deleteGroup = useMutation({
+    mutationFn: (id: string) => unwrap(api(`/api/groups/${id}`, { method: "DELETE" })),
+    onSettled: settle,
+  });
+  const renameTag = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      unwrap(api(`/api/tags/${id}`, { method: "PATCH", body: { name } })),
+    onSettled: settle,
+  });
+  const deleteTag = useMutation({
+    mutationFn: (id: string) => unwrap(api(`/api/tags/${id}`, { method: "DELETE" })),
+    onSettled: settle,
+  });
+  const merge = useMutation({
+    mutationFn: (input: { keepId: string; mergeIds: string[] }) =>
+      unwrap(api<{ item: ReferenceRecord }>("/api/duplicates", { method: "POST", body: input })).then(
+        (d) => d.item,
+      ),
+    onSettled: settle,
+  });
+  return { createGroup, updateGroup, deleteGroup, renameTag, deleteTag, merge };
 }

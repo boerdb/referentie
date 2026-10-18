@@ -124,9 +124,42 @@ export function parseReferenceInput(
     if (parsed.value !== undefined) out[key] = parsed.value;
   }
 
+  if (b.label !== undefined) {
+    if (b.label !== null && (!Number.isInteger(b.label) || (b.label as number) < 1 || (b.label as number) > 7)) {
+      return { ok: false, error: "Ongeldig label." };
+    }
+    out.label = b.label as number | null;
+  }
+
+  if (b.tags !== undefined) {
+    const tags = parseTagNames(b.tags);
+    if (!tags.ok) return tags;
+    out.tags = tags.value;
+  }
+
   const authors = parseAuthors(b.authors);
   if (!authors.ok) return authors;
   if (authors.value !== undefined) out.authors = authors.value;
 
+  return { ok: true, value: out };
+}
+
+/** Trefwoorden: maximaal 50 per artikel, elk 1–100 tekens, dubbele (hoofdletterongevoelig) eruit. */
+export function parseTagNames(value: unknown): Result<string[]> {
+  if (!Array.isArray(value) || value.length > 50) {
+    return { ok: false, error: "Trefwoorden moeten een lijst van maximaal 50 zijn." };
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") return { ok: false, error: "Trefwoorden moeten tekst zijn." };
+    const name = raw.trim().replace(/\s+/g, " ");
+    if (!name) continue;
+    if (name.length > 100) return { ok: false, error: "Een trefwoord is langer dan 100 tekens." };
+    const key = name.toLocaleLowerCase("nl");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
   return { ok: true, value: out };
 }

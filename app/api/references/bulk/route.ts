@@ -6,16 +6,22 @@ import {
   trashReference,
   updateReference,
 } from "@/lib/references/queries";
-import { parseReferenceInput } from "@/lib/references/validate";
+import { setGroupMembership } from "@/lib/references/groups";
+import { tagReferences } from "@/lib/references/tags";
+import { parseReferenceInput, parseTagNames } from "@/lib/references/validate";
 import { deletePdfFilesForReference } from "@/lib/uploads/pdf";
 import { jsonError, jsonOk, readJson, requireSession } from "@/lib/api/http";
 
 const MAX_IDS = 500;
 
 type Body = {
-  action?: "update" | "trash" | "restore" | "purge";
+  action?: "update" | "trash" | "restore" | "purge" | "tag" | "group";
   ids?: unknown;
   patch?: unknown;
+  /** Bij "tag": naam van het trefwoord. Bij "group": id van de groep. */
+  tag?: unknown;
+  groupId?: unknown;
+  remove?: unknown;
 };
 
 /** Eén actie op meerdere artikelen tegelijk (meervoudige selectie). */
@@ -36,13 +42,26 @@ export async function POST(req: NextRequest) {
       const parsed = parseReferenceInput(body.patch, { partial: true });
       if (!parsed.ok) return jsonError(parsed.error, 400);
       // Alleen velden die voor een selectie zinvol zijn.
-      const { status, starred } = parsed.value;
-      if (status === undefined && starred === undefined) {
-        return jsonError("Alleen status en favoriet kunnen in bulk worden aangepast.", 400);
+      const { status, starred, label } = parsed.value;
+      if (status === undefined && starred === undefined && label === undefined) {
+        return jsonError("Alleen status, favoriet en label kunnen in bulk worden aangepast.", 400);
       }
       for (const id of ids) {
-        if (await updateReference(session.userId, id, { status, starred })) done += 1;
+        if (await updateReference(session.userId, id, { status, starred, label })) done += 1;
       }
+      break;
+    }
+    case "tag": {
+      const parsed = parseTagNames([body.tag]);
+      if (!parsed.ok || parsed.value.length !== 1) return jsonError("Geef een trefwoord.", 400);
+      done = await tagReferences(session.userId, ids, parsed.value[0], body.remove === true);
+      break;
+    }
+    case "group": {
+      if (typeof body.groupId !== "string") return jsonError("Kies een groep.", 400);
+      const result = await setGroupMembership(session.userId, body.groupId, ids, body.remove === true);
+      if (result === null) return jsonError("Groep niet gevonden.", 404);
+      done = result;
       break;
     }
     case "trash":

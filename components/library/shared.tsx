@@ -1,6 +1,6 @@
 import { BookOpen, Circle, CircleCheck, Library, type LucideIcon } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth/session";
-import type { ReferenceRecord, RefStatus } from "@/lib/references/types";
+import { LABELS, type ReferenceRecord, type RefStatus } from "@/lib/references/types";
 import { cn } from "@/lib/utils";
 
 export type FilterStatus = RefStatus | "all";
@@ -25,6 +25,69 @@ const STATUS_DOT: Record<RefStatus, string> = {
 };
 
 export const STATUSES = ["unread", "reading", "read"] as const;
+
+/** Sleepdata voor artikelen (naar een groep in de zijbalk). */
+export const DRAG_MIME = "application/x-referentie-ids";
+
+export function labelInfo(label: number | null | undefined) {
+  return LABELS.find((l) => l.id === label) ?? null;
+}
+
+export function LabelDot({ label, className }: { label: number | null; className?: string }) {
+  const info = labelInfo(label);
+  if (!info) return null;
+  return (
+    <span
+      className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", className)}
+      style={{ background: info.color }}
+      title={info.name}
+      aria-label={`Label ${info.name.toLowerCase()}`}
+    />
+  );
+}
+
+/** Zeven kleuren plus "geen", zoals de labels in Bookends. */
+export function LabelPicker({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (label: number | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Kleurlabel">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={value === null}
+        title="Geen label"
+        onClick={() => onChange(null)}
+        className={cn(
+          "grid h-6 w-6 place-items-center rounded-full border border-dashed border-[var(--border-strong)] text-[0.625rem] text-[var(--text-subtle)] max-lg:h-9 max-lg:w-9",
+          value === null && "ring-2 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--bg-panel)]",
+        )}
+      >
+        ×
+      </button>
+      {LABELS.map((l) => (
+        <button
+          key={l.id}
+          type="button"
+          role="radio"
+          aria-checked={value === l.id}
+          title={l.name}
+          aria-label={l.name}
+          onClick={() => onChange(l.id)}
+          className={cn(
+            "h-6 w-6 rounded-full max-lg:h-9 max-lg:w-9",
+            value === l.id && "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--bg-panel)]",
+          )}
+          style={{ background: l.color }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export function isDesktop(): boolean {
   return !window.matchMedia("(max-width: 1023px)").matches;

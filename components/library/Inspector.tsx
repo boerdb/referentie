@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { CitationPanel } from "./CitationPanel";
 import { PdfViewer } from "./PdfViewer";
 import { NotesSection } from "./inspector/NotesSection";
+import { BulkOrganize, DuplicatesPanel, OrganizeSection } from "./inspector/organize";
 import {
   AbstractSection,
   AttachmentSection,
@@ -47,6 +48,11 @@ type Props = {
   reference: ReferenceRecord | null;
   /** Meer dan één artikel geselecteerd: toon het bulkpaneel. */
   selection: ReferenceRecord[];
+  /** In de weergave "Mogelijke dubbelen": de set waar het artikel in zit. */
+  duplicateSet: ReferenceRecord[] | null;
+  /** Getoonde handmatige groep, voor "uit deze groep halen". */
+  currentGroupId: string | null;
+  onMerged: (keepId: string) => void;
   /** Op de telefoon: inspector verborgen zolang de lijst getoond wordt. */
   hidden: boolean;
   pdfOpen: boolean;
@@ -81,7 +87,13 @@ export function Inspector(props: Props) {
       )}
     >
       {selection.length > 1 ? (
-        <BulkPanel selection={selection} onBulk={props.onBulk} />
+        <BulkPanel selection={selection} currentGroupId={props.currentGroupId} onBulk={props.onBulk} />
+      ) : props.duplicateSet && props.duplicateSet.length > 1 ? (
+        <DuplicatesPanel
+          key={props.duplicateSet.map((r) => r.id).join()}
+          set={props.duplicateSet}
+          onMerged={props.onMerged}
+        />
       ) : reference ? (
         <ReferenceDetail key={reference.id} {...props} reference={reference} />
       ) : (
@@ -344,6 +356,7 @@ function ReferenceDetail({
                 onCopy={(style) => void copyCitation(reference.id, style)}
                 onExport={(mode) => void exportReference(reference, mode)}
               />
+              {!inTrash && <OrganizeSection reference={reference} />}
               <MetadataSection reference={reference} />
             </div>
           )}
@@ -373,9 +386,11 @@ function ReferenceDetail({
 
 function BulkPanel({
   selection,
+  currentGroupId,
   onBulk,
 }: {
   selection: ReferenceRecord[];
+  currentGroupId: string | null;
   onBulk: (action: BulkRequest) => void;
 }) {
   const inTrash = selection.every((r) => r.deletedAt !== null);
@@ -453,6 +468,7 @@ function BulkPanel({
               <Trash2 className="h-4 w-4" /> Naar de prullenbak
             </button>
           </div>
+          <BulkOrganize ids={selection.map((r) => r.id)} currentGroupId={currentGroupId} />
         </>
       )}
       <p className="mt-6 text-xs text-[var(--text-subtle)]">

@@ -10,7 +10,11 @@ import type { SessionPayload } from "@/lib/auth/session";
 import { formatBibtex } from "@/lib/cite/formats";
 import {
   useBulkAction,
+  useDuplicateSets,
   useEmptyTrash,
+  useGroups,
+  useOrganize,
+  useTags,
   useInvalidateLibrary,
   usePurgeReference,
   useReferenceCounts,
@@ -24,7 +28,8 @@ import {
 import { flushPendingNotes } from "@/lib/library/note-flush";
 import { usePref } from "@/lib/library/prefs";
 import { clearOfflineCache } from "@/lib/pwa/cache";
-import type { ReferenceRecord } from "@/lib/references/types";
+import type { SmartRules } from "@/lib/references/smart";
+import { LABELS, type GroupRecord, type ReferenceRecord } from "@/lib/references/types";
 import { shareOrCopyText } from "@/lib/share/files";
 import { looksLikePdfFile } from "@/lib/uploads/is-pdf";
 import { cn } from "@/lib/utils";
@@ -43,14 +48,14 @@ import {
   type SortState,
 } from "./ReferenceTable";
 import { STATUS_LABEL, isDesktop } from "./shared";
-import { Sidebar, type LibraryView } from "./Sidebar";
+import { DEFAULT_VIEW, Sidebar, type LibraryView } from "./Sidebar";
+import { SmartGroupDialog } from "./SmartGroupDialog";
 import { StatusBar, Toolbar, type ListMode } from "./Toolbar";
 
 type Props = {
   user: SessionPayload;
 };
 
-const DEFAULT_VIEW: LibraryView = { status: "all", starred: false, hasPdf: false, trash: false };
 const INSPECTOR_DEFAULT = 400;
 const INSPECTOR_MIN = 320;
 const INSPECTOR_MAX = 760;
@@ -69,6 +74,7 @@ export function LibraryApp({ user }: Props) {
   const purgeMutation = usePurgeReference();
   const emptyTrashMutation = useEmptyTrash();
   const bulkMutation = useBulkAction();
+  const organize = useOrganize();
   const citation = useCitationCopy();
   const exporter = useExport();
 
@@ -97,6 +103,8 @@ export function LibraryApp({ user }: Props) {
   const [pdfDropActive, setPdfDropActive] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
   const [doiImporting, setDoiImporting] = useState(false);
+  /** Open regeleditor: nieuwe slimme groep of een bestaande bewerken. */
+  const [smartDialog, setSmartDialog] = useState<{ group: GroupRecord | null } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -110,6 +118,12 @@ export function LibraryApp({ user }: Props) {
   const params: ListParams = { ...view, q: debouncedQuery, field };
   const list = useReferenceList(params);
   const counts = useReferenceCounts();
+  const groupsQuery = useGroups();
+  const tagsQuery = useTags();
+  const duplicateSets = useDuplicateSets(view.duplicates);
+  const groups = groupsQuery.data ?? [];
+  const tags = tagsQuery.data ?? [];
+  const currentGroup = groups.find((g) => g.id === view.group) ?? null;
   const items = useMemo(() => sortReferences(list.data ?? [], sort), [list.data, sort]);
 
   // Zonder expliciete keuze het eerste artikel tonen.
@@ -129,13 +143,30 @@ export function LibraryApp({ user }: Props) {
 
   const listTitle = view.trash
     ? "Prullenbak"
-    : [
+    : view.duplicates
+      ? "Mogelijke dubbelen"
+      : currentGroup
+        ? currentGroup.name
+        : view.tag
+          ? `Trefwoord: ${tags.find((t) => t.id === view.tag)?.name ?? "…"}`
+          : view.label
+            ? `Label: ${LABELS.find((l) => l.id === view.label)?.name ?? ""}`
+            : [
         view.status === "all" ? "Alle artikelen" : STATUS_LABEL[view.status],
         view.starred && "favorieten",
         view.hasPdf && "met PDF",
       ]
         .filter(Boolean)
         .join(" · ");
+
+  // In de dubbelenweergave: de set waar het geselecteerde artikel in zit.
+  const duplicateSet =
+    view.duplicates && primary
+      ? (duplicateSets.data
+          ?.find((set) => set.includes(primary.id))
+          ?.map((id) => items.find((i) => i.id === id))
+          .filter((r): r is ReferenceRecord => Boolean(r)) ?? null)
+      : null;
 
   /** Eén artikel selecteren (en op de telefoon openen). */
   function select(id: string | null) {
@@ -455,6 +486,8 @@ export function LibraryApp({ user }: Props) {
   }
 
   function onPdfDrop(e: React.DragEvent) {
+    // Artikelen die naar een groep worden gesleept zijn geen bestanden.
+    if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
     pdfDropDepth.current = 0;
     setPdfDropActive(false);
@@ -487,6 +520,113 @@ export function LibraryApp({ user }: Props) {
     target.addEventListener("pointerup", onUp);
   }
 
+  function dropOnGroup(groupId: string, ids: string[]) {
+    const group = groups.find((g) => g.id === groupId);
+    const n = ids.length;
+    bulkMutation.mutate(
+      { action: "group", groupId, ids },
+      {
+        onError: (error) => toast.error("Toevoegen aan groep mislukt", error.message),
+        onSuccess: () =>
+          toast.success(`${n} ${n === 1 ? "artikel" : "artikelen"} toegevoegd aan ${group?.name ?? "groep"}`),
+      },
+    );
+  }
+
+  async function createGroup(parentId: string | null) {
+    const parent = groups.find((g) => g.id === parentId);
+    const name = await toast.prompt({
+      title: parent ? `Subgroep in ${parent.name}` : "Nieuwe groep",
+      label: "Naam",
+      placeholder: "Bijv. Sepsis",
+      confirmLabel: "Maken",
+    });
+    if (!name) return;
+    organize.createGroup.mutate(
+      { name, kind: "manual", parentId },
+      {
+        onError: (error) => toast.error("Groep maken mislukt", error.message),
+        onSuccess: (id) => {
+          toast.success(`Groep "${name}" gemaakt`, "Sleep artikelen naar de groep om ze toe te voegen.");
+          changeView({ ...DEFAULT_VIEW, group: id });
+        },
+      },
+    );
+  }
+
+  function saveSmart(name: string, rules: SmartRules) {
+    const editing = smartDialog?.group;
+    const done = (id: string) => {
+      setSmartDialog(null);
+      changeView({ ...DEFAULT_VIEW, group: id });
+    };
+    if (editing) {
+      organize.updateGroup.mutate(
+        { id: editing.id, name, rules },
+        {
+          onError: (error) => toast.error("Opslaan mislukt", error.message),
+          onSuccess: () => done(editing.id),
+        },
+      );
+    } else {
+      organize.createGroup.mutate(
+        { name, kind: "smart", rules },
+        {
+          onError: (error) => toast.error("Opslaan mislukt", error.message),
+          onSuccess: done,
+        },
+      );
+    }
+  }
+
+  async function renameGroup(group: GroupRecord) {
+    const name = await toast.prompt({ title: "Naam wijzigen", label: "Naam", initial: group.name });
+    if (!name || name === group.name) return;
+    organize.updateGroup.mutate(
+      { id: group.id, name },
+      { onError: (error) => toast.error("Naam wijzigen mislukt", error.message) },
+    );
+  }
+
+  async function deleteGroup(group: GroupRecord) {
+    const hasChildren = groups.some((g) => g.parentId === group.id);
+    const ok = await toast.confirm({
+      title: `Groep "${group.name}" verwijderen?`,
+      description: `De artikelen blijven in je bibliotheek staan.${hasChildren ? " Subgroepen worden ook verwijderd." : ""}`,
+      confirmLabel: "Groep verwijderen",
+      danger: true,
+    });
+    if (!ok) return;
+    if (view.group === group.id) changeView(DEFAULT_VIEW);
+    organize.deleteGroup.mutate(group.id, {
+      onError: (error) => toast.error("Verwijderen mislukt", error.message),
+      onSuccess: () => toast.success("Groep verwijderd"),
+    });
+  }
+
+  async function renameTag(tag: { id: string; name: string }) {
+    const name = await toast.prompt({ title: "Trefwoord hernoemen", label: "Naam", initial: tag.name });
+    if (!name || name === tag.name) return;
+    organize.renameTag.mutate(
+      { id: tag.id, name },
+      { onError: (error) => toast.error("Hernoemen mislukt", error.message) },
+    );
+  }
+
+  async function deleteTag(tag: { id: string; name: string; count: number }) {
+    const ok = await toast.confirm({
+      title: `Trefwoord "${tag.name}" verwijderen?`,
+      description: `Het trefwoord verdwijnt bij ${tag.count} ${tag.count === 1 ? "artikel" : "artikelen"}; de artikelen zelf blijven staan.`,
+      confirmLabel: "Verwijderen",
+      danger: true,
+    });
+    if (!ok) return;
+    if (view.tag === tag.id) changeView(DEFAULT_VIEW);
+    organize.deleteTag.mutate(tag.id, {
+      onError: (error) => toast.error("Verwijderen mislukt", error.message),
+    });
+  }
+
   async function logout() {
     await flushPendingNotes();
     await api("/api/auth/logout", { method: "POST" });
@@ -496,7 +636,8 @@ export function LibraryApp({ user }: Props) {
     router.refresh();
   }
 
-  const filtered = Boolean(debouncedQuery) || view.status !== "all" || view.starred || view.hasPdf;
+  const filtered =
+    Boolean(debouncedQuery) || view.status !== "all" || view.starred || view.hasPdf || Boolean(view.tag || view.label);
   const loading = list.isPending || (list.isFetching && list.isPlaceholderData);
   const listError = list.error && !unauthorized ? list.error.message : null;
 
@@ -594,7 +735,17 @@ export function LibraryApp({ user }: Props) {
             user={user}
             view={view}
             counts={counts.data}
+            groups={groups}
+            tags={tags}
             onViewChange={changeView}
+            onDropOnGroup={dropOnGroup}
+            onCreateGroup={(parentId) => void createGroup(parentId)}
+            onCreateSmart={() => setSmartDialog({ group: null })}
+            onEditSmart={(group) => setSmartDialog({ group })}
+            onRenameGroup={(group) => void renameGroup(group)}
+            onDeleteGroup={(group) => void deleteGroup(group)}
+            onRenameTag={(tag) => void renameTag(tag)}
+            onDeleteTag={(tag) => void deleteTag(tag)}
             onClose={() => setMobileMenuOpen(false)}
             onUploadPdf={() => importFileRef.current?.click()}
             onOpenPalette={() => setPaletteOpen(true)}
@@ -662,7 +813,13 @@ export function LibraryApp({ user }: Props) {
                     <div className="px-6 py-14 text-center text-sm text-[var(--text-muted)]">
                       {view.trash
                         ? "De prullenbak is leeg."
-                        : filtered
+                        : view.duplicates
+                          ? "Geen mogelijke dubbelen gevonden."
+                          : currentGroup?.kind === "manual" && !filtered
+                            ? "Deze groep is nog leeg. Sleep artikelen vanuit de lijst naar de groep in de zijbalk."
+                            : currentGroup?.kind === "smart" && !filtered
+                              ? "Geen artikelen voldoen aan de regels van deze slimme groep."
+                              : filtered
                           ? "Geen artikelen gevonden."
                           : "Nog geen artikelen. Sleep een PDF hierheen of plak een DOI via Ctrl K."}
                     </div>
@@ -707,6 +864,9 @@ export function LibraryApp({ user }: Props) {
             <Inspector
               reference={primary}
               selection={multiSelection}
+              duplicateSet={duplicateSet}
+              currentGroupId={currentGroup?.kind === "manual" ? currentGroup.id : null}
+              onMerged={(keepId) => select(keepId)}
               hidden={false}
               pdfOpen={showPdf}
               onBack={() => setMobilePane("list")}
@@ -747,6 +907,16 @@ export function LibraryApp({ user }: Props) {
           onExport={(mode) => {
             if (primary) void exporter.exportReference(primary, mode);
           }}
+        />
+      )}
+      {smartDialog && (
+        <SmartGroupDialog
+          title={smartDialog.group ? "Slimme groep bewerken" : "Nieuwe slimme groep"}
+          initialName={smartDialog.group?.name}
+          initialRules={smartDialog.group?.rules}
+          saving={organize.createGroup.isPending || organize.updateGroup.isPending}
+          onClose={() => setSmartDialog(null)}
+          onSave={saveSmart}
         />
       )}
       {addSheetOpen && (

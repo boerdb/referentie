@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS ref_items (
   status ENUM('unread', 'reading', 'read') NOT NULL DEFAULT 'unread',
   starred TINYINT(1) NOT NULL DEFAULT 0,
   deleted_at TIMESTAMP NULL DEFAULT NULL,
+  label TINYINT UNSIGNED NULL DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS ref_items (
   INDEX idx_ref_user_status (user_id, status),
   INDEX idx_ref_user_starred (user_id, starred),
   INDEX idx_ref_user_deleted (user_id, deleted_at),
+  INDEX idx_ref_user_label (user_id, label),
   FULLTEXT idx_ref_search (title, abstract, journal)
 ) ENGINE=InnoDB;
 
@@ -99,4 +101,46 @@ CREATE TABLE IF NOT EXISTS highlights (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (attachment_id) REFERENCES attachments(id) ON DELETE CASCADE,
   INDEX idx_hl_att (attachment_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS ref_groups (
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  parent_id CHAR(36) NULL,
+  name VARCHAR(255) NOT NULL,
+  kind ENUM('manual', 'smart') NOT NULL DEFAULT 'manual',
+  rules JSON NULL,
+  position INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (parent_id) REFERENCES ref_groups(id) ON DELETE CASCADE,
+  INDEX idx_groups_user (user_id, kind, position)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS group_items (
+  group_id CHAR(36) NOT NULL,
+  reference_id CHAR(36) NOT NULL,
+  added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (group_id, reference_id),
+  FOREIGN KEY (group_id) REFERENCES ref_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (reference_id) REFERENCES ref_items(id) ON DELETE CASCADE,
+  INDEX idx_gi_ref (reference_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS tags (
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_tag_user_name (user_id, name)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS reference_tags (
+  reference_id CHAR(36) NOT NULL,
+  tag_id CHAR(36) NOT NULL,
+  PRIMARY KEY (reference_id, tag_id),
+  FOREIGN KEY (reference_id) REFERENCES ref_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE,
+  INDEX idx_rt_tag (tag_id)
 ) ENGINE=InnoDB;
