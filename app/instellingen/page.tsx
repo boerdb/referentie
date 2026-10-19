@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getSessionFromCookies } from "@/lib/auth/session";
 import { ThemeSelector } from "@/components/theme/ThemeSelector";
+import { copyrightLine, versionLine } from "@/lib/app-info";
 
 export default async function InstellingenPage() {
   const session = await getSessionFromCookies();
@@ -42,6 +43,11 @@ export default async function InstellingenPage() {
           </p>
         </section>
       </div>
+
+      <footer className="mt-10 space-y-1 text-center text-xs text-[var(--text-subtle)]">
+        <p className="tabular-nums">{versionLine()}</p>
+        <p>{copyrightLine()}</p>
+      </footer>
     </div>
   );
 }
