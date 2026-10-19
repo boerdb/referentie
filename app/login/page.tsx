@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { APP_VERSION, copyrightLine } from "@/lib/app-info";
 import { Loader2 } from "lucide-react";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { cn } from "@/lib/utils";
@@ -147,11 +148,16 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="mt-6 text-center text-xs text-[var(--text-subtle)]">
-          <Link href="/api/health/redis" className="hover:text-[var(--text-muted)] hover:underline">
-            Systeemstatus
-          </Link>
-        </p>
+        <div className="mt-6 space-y-1 text-center text-xs text-[var(--text-subtle)]">
+          <p>
+            <Link href="/api/health/redis" className="hover:text-[var(--text-muted)] hover:underline">
+              Systeemstatus
+            </Link>
+            <span aria-hidden> · </span>
+            <span className="tabular-nums">versie {APP_VERSION}</span>
+          </p>
+          <p>{copyrightLine()}</p>
+        </div>
       </div>
     </div>
   );
