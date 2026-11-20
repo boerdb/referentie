@@ -1,4 +1,4 @@
-# Referentie — productie op Next-server (192.168.1.32)
+# Referentie — productie op de VPS (85.10.144.42)
 
 **Repo:** `git@github.com:boerdb/referentie.git`  
 **Pad:** `/var/www/referentie`  
@@ -16,9 +16,9 @@ python scripts/deploy_setup.py
 
 Dit script:
 
-- voert `sql/schema.sql` uit op MariaDB **192.168.1.14** (volledig schema voor een nieuwe installatie)
+- voert `sql/schema.sql` uit op MariaDB op de VPS (volledig schema voor een nieuwe installatie)
 - maakt user `referentie` (wachtwoord uit `REFERENTIE_DB_PASS` in `scripts/.secrets.local` of env; MySQL-root uit `MYSQL_ROOT_PASS`)
-- schrijft `/var/www/referentie/.env.local` op **.32**
+- schrijft `/var/www/referentie/.env.local` op de VPS
 - clone + `scripts/deploy.sh` + PM2
 
 ## Databasemigraties
@@ -33,7 +33,7 @@ npm run db:migrate               # toepassen
 ```
 
 DDL in MariaDB is niet terug te draaien: maak vóór een deploy met nieuwe migraties een back-up
-(`mysqldump referentie > referentie-$(date +%F).sql` op .14).
+(`mysqldump referentie > referentie-$(date +%F).sql` op de VPS).
 
 ## Update (lokaal → server)
 
@@ -45,7 +45,7 @@ npm run deploy
 Of alleen op de server:
 
 ```bash
-ssh root@192.168.1.32
+ssh -i ~/.ssh/id_ed25519_homelab root@85.10.144.42
 cd /var/www/referentie
 bash scripts/deploy.sh
 ```

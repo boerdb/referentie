@@ -4,7 +4,7 @@ geheimen uit scripts/.secrets.local of de omgeving (nooit hardgecodeerd).
 
 SSH_KEY_PATH        pad naar de private key (standaard ~/.ssh/id_ed25519_homelab)
 SSH_KEY_PASSPHRASE  wachtzin van de sleutel, alleen als die er een heeft
-MYSQL_ROOT_PASS     MySQL-root-wachtwoord op de DB-server (192.168.1.14)
+MYSQL_ROOT_PASS     MySQL-root-wachtwoord op de VPS (85.10.144.42)
 
 Omgevingsvariabelen gaan voor op scripts/.secrets.local.
 """

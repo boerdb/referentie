@@ -1,11 +1,11 @@
 /**
  * Redis-test (news-app patroon):
  *   node scripts/test-redis.mjs
- *   REDIS_URL=redis://192.168.1.14:6379 node scripts/test-redis.mjs
+ *   REDIS_URL=redis://127.0.0.1:6379 node scripts/test-redis.mjs
  */
 import { createClient } from "redis";
 
-const url = process.env.REDIS_URL || "redis://192.168.1.14:6379";
+const url = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
 async function main() {
   const client = createClient({ url });

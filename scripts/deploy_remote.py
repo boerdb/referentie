@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy referentie naar 192.168.1.32 — zelfde patroon als IC-support deploy_remote.py."""
+"""Deploy referentie naar de VPS (85.10.144.42) — zelfde patroon als IC-support deploy_remote.py."""
 import os
 import subprocess
 import sys
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import paramiko
 
-HOST = os.environ.get("DEPLOY_HOST", "192.168.1.32")
+HOST = os.environ.get("DEPLOY_HOST", "85.10.144.42")
 USER = os.environ.get("DEPLOY_USER", "root")
 # Inloggen met de SSH-sleutel, niet met een wachtwoord.
 SSH_KEY_PATH = os.path.expanduser(os.environ.get("SSH_KEY_PATH", "~/.ssh/id_ed25519_homelab"))

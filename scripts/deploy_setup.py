@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Eerste setup: MariaDB schema op .14 + .env.local op .32 + deploy — IC-support deploy_push patroon."""
+"""Eerste setup: MariaDB-schema + .env.local op de VPS (85.10.144.42) + deploy — IC-support deploy_push patroon."""
 from __future__ import annotations
 
 import os
@@ -11,11 +11,11 @@ import paramiko
 
 from homelab import mysql_root, secret, ssh_connect
 
-HOST = os.environ.get("DEPLOY_HOST", "192.168.1.32")
+HOST = os.environ.get("DEPLOY_HOST", "85.10.144.42")
 USER = os.environ.get("DEPLOY_USER", "root")
 APP_DIR = os.environ.get("DEPLOY_DIR", "/var/www/referentie")
-DB_SSH_HOST = os.environ.get("DB_SSH_HOST", "192.168.1.14")
-DB_HOST = os.environ.get("DB_HOST", "192.168.1.14")
+DB_SSH_HOST = os.environ.get("DB_SSH_HOST", "85.10.144.42")
+DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
 DB_USER = os.environ.get("DB_USER", "referentie")
 DB_PASS = secret("REFERENTIE_DB_PASS")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -100,7 +100,7 @@ def merge_env_local(ssh: paramiko.SSHClient) -> None:
     env = parse_env(out)
     if not env.get("DATABASE_URL"):
         env["DATABASE_URL"] = f"mysql://{DB_USER}:{DB_PASS}@{DB_HOST}:3306/referentie"
-    env.setdefault("REDIS_URL", "redis://192.168.1.14:6379")
+    env.setdefault("REDIS_URL", "redis://127.0.0.1:6379")
     env.setdefault("NODE_ENV", "production")
     env.setdefault("PORT", "3023")
     env.setdefault("REGISTRATION_OPEN", "true")
@@ -150,7 +150,7 @@ fi
     )
     ssh_app.close()
     print("\n=== Referentie setup + deploy complete ===")
-    print("App: http://192.168.1.32:3023")
+    print(f"App: PM2 referentie op {HOST}, poort 3023")
 
 
 if __name__ == "__main__":
