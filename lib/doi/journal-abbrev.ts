@@ -126,6 +126,8 @@ function pickCatalogEntry(matches: CatalogEntry[]): CatalogEntry | null {
     matches,
     matches.filter((m) => m.currentindexingstatus === "Y"),
     matches.filter((m) => m.endyear === "9999"),
+    // Zelfde naam, kleiner blad met plaatsnaam ("J Clin Med (Chestert)"): de afkorting zonder plaats.
+    matches.filter((m) => m.endyear === "9999" && !m.medlineta?.includes("(")),
   ]) {
     if (subset.length === 1) return subset[0];
   }
