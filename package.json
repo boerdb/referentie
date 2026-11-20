@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 -p 3020",
+    "dev": "node scripts/dev-met-tunnel.mjs",
+    "dev:zonder-tunnel": "next dev --hostname 0.0.0.0 -p 3020",
     "build": "next build",
     "start": "next start -p 3023",
     "lint": "eslint",
