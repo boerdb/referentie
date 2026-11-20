@@ -26,6 +26,26 @@ export function normalizeJournalTitle(title: string): string {
     .replace(/^the /, "");
 }
 
+/**
+ * Lijkt `abbrev` echt een afkorting van `title`? Elk woord moet het begin zijn van een
+ * volgend woord in de titel ("N Engl J Med" ← "New England Journal of Medicine").
+ * Crossref geeft soms een bijnaam van de uitgever ("ICMx", "JCM"); die vallen hierdoor af.
+ */
+export function isPlausibleAbbrev(abbrev: string, title: string): boolean {
+  const clean = (s: string) =>
+    s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/&/g, " and ");
+  const tokens = clean(abbrev).split(/[^a-z0-9]+/).filter(Boolean);
+  const words = clean(title).split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  let at = 0;
+  for (const token of tokens) {
+    while (at < words.length && !words[at].startsWith(token)) at += 1;
+    if (at >= words.length) return false;
+    at += 1;
+  }
+  return true;
+}
+
 type CatalogEntry = {
   titlemainlist?: { title?: string }[];
   medlineta?: string;

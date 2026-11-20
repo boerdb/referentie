@@ -219,6 +219,21 @@ async function lookupCrossref(doi) {
   throw new Error(`Crossref gaf HTTP ${lastStatus || "geen antwoord"}`);
 }
 
+/** Zelfde als isPlausibleAbbrev in lib/doi/journal-abbrev.ts. */
+function isPlausibleAbbrev(abbrev, title) {
+  const clean = (s) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/&/g, " and ");
+  const tokens = clean(abbrev).split(/[^a-z0-9]+/).filter(Boolean);
+  const words = clean(title).split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  let at = 0;
+  for (const token of tokens) {
+    while (at < words.length && !words[at].startsWith(token)) at += 1;
+    if (at >= words.length) return false;
+    at += 1;
+  }
+  return true;
+}
+
 async function lookupDoiOrg(doi) {
   const res = await fetchJson(`https://doi.org/${encodeURI(doi)}`, {
     Accept: "application/vnd.citationstyles.csl+json",
@@ -434,7 +449,10 @@ async function insertReference(conn, userId, study, meta, doi) {
   // Afkorting van Crossref alleen als de tijdschriftnaam dezelfde is; anders vult
   // scripts/fill-journal-abbrevs.mjs hem later aan.
   const journalAbbrev =
-    meta?.journalAbbrev && (!study.source?.trim() || journal?.toLowerCase() === meta.journal?.toLowerCase())
+    meta?.journalAbbrev &&
+    meta.journal &&
+    isPlausibleAbbrev(meta.journalAbbrev, meta.journal) &&
+    (!study.source?.trim() || journal?.toLowerCase() === meta.journal.toLowerCase())
       ? meta.journalAbbrev.slice(0, 255)
       : null;
   const url = study.url?.trim() || meta?.url || null;

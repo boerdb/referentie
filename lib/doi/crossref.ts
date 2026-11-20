@@ -1,6 +1,7 @@
 import { redisGet, redisSetEx } from "@/lib/redis";
 import type { ReferenceInput } from "@/lib/references/types";
 import { fetchAbstractByDoi, stripAbstractHtml } from "@/lib/doi/abstract";
+import { isPlausibleAbbrev } from "@/lib/doi/journal-abbrev";
 import { decodeEntities } from "@/lib/text/entities";
 import {
   cleanDoiForLookup,
@@ -76,6 +77,13 @@ function firstString(value: string | string[] | undefined): string | null {
   return t || null;
 }
 
+/** Afkorting van Crossref alleen als die echt bij de titel past; anders zoekt de app hem bij NLM. */
+function plausibleAbbrev(abbrev: string | undefined, title: string | undefined): string | null {
+  const a = abbrev?.trim();
+  if (!a || !title || a.toLowerCase() === title.trim().toLowerCase()) return null;
+  return isPlausibleAbbrev(a, title) ? a : null;
+}
+
 function mapWork(work: CrossrefWork): ReferenceInput {
   return {
     type: "article",
@@ -83,7 +91,7 @@ function mapWork(work: CrossrefWork): ReferenceInput {
     abstract: work.abstract ? stripAbstractHtml(work.abstract) : null,
     year: yearFromWork(work),
     journal: work["container-title"]?.[0]?.trim() ?? null,
-    journalAbbrev: work["short-container-title"]?.[0]?.trim() || null,
+    journalAbbrev: plausibleAbbrev(work["short-container-title"]?.[0], work["container-title"]?.[0]),
     volume: work.volume ?? null,
     issue: work.issue ?? null,
     pages: work.page ?? null,
@@ -104,7 +112,10 @@ function mapCsl(work: CslWork): ReferenceInput {
     abstract: work.abstract ? stripAbstractHtml(work.abstract) : null,
     year: yearFromWork(work),
     journal: firstString(work["container-title"]),
-    journalAbbrev: firstString(work["container-title-short"]),
+    journalAbbrev: plausibleAbbrev(
+      firstString(work["container-title-short"]) ?? undefined,
+      firstString(work["container-title"]) ?? undefined,
+    ),
     volume: work.volume != null ? String(work.volume) : null,
     issue: work.issue != null ? String(work.issue) : null,
     pages: work.page ?? null,
@@ -180,7 +191,7 @@ async function fetchFromDoiOrg(doi: string): Promise<ReferenceInput> {
 
 async function cachedGet(doi: string): Promise<ReferenceInput | null> {
   try {
-    return await redisGet<ReferenceInput>(`doi2:${doi.toLowerCase()}`);
+    return await redisGet<ReferenceInput>(`doi3:${doi.toLowerCase()}`);
   } catch (e) {
     console.warn("[doi-cache get]", e instanceof Error ? e.message : e);
     return null;
@@ -189,7 +200,7 @@ async function cachedGet(doi: string): Promise<ReferenceInput | null> {
 
 async function cachedSet(doi: string, value: ReferenceInput): Promise<void> {
   try {
-    await redisSetEx(`doi2:${doi.toLowerCase()}`, value, CACHE_TTL);
+    await redisSetEx(`doi3:${doi.toLowerCase()}`, value, CACHE_TTL);
   } catch (e) {
     console.warn("[doi-cache set]", e instanceof Error ? e.message : e);
   }

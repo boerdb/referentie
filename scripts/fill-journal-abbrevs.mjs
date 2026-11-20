@@ -59,6 +59,21 @@ function normalizeJournalTitle(title) {
     .replace(/^the /, "");
 }
 
+/** Zelfde als isPlausibleAbbrev in lib/doi/journal-abbrev.ts. */
+function isPlausibleAbbrev(abbrev, title) {
+  const clean = (s) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/&/g, " and ");
+  const tokens = clean(abbrev).split(/[^a-z0-9]+/).filter(Boolean);
+  const words = clean(title).split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  let at = 0;
+  for (const token of tokens) {
+    while (at < words.length && !words[at].startsWith(token)) at += 1;
+    if (at >= words.length) return false;
+    at += 1;
+  }
+  return true;
+}
+
 async function getJson(url, headers = {}) {
   const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
   if (res.status === 404) return null;
@@ -76,7 +91,7 @@ async function fromCrossref(doi, wanted) {
   const title = work["container-title"]?.[0];
   if (!title || normalizeJournalTitle(title) !== wanted) return null;
   const short = work["short-container-title"]?.[0]?.trim();
-  return short && normalizeJournalTitle(short) !== wanted ? short : null;
+  return short && normalizeJournalTitle(short) !== wanted && isPlausibleAbbrev(short, title) ? short : null;
 }
 
 /** Zelfde als STOPWORDS in lib/doi/journal-abbrev.ts. */
