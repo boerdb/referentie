@@ -45,6 +45,8 @@ export function toCslItem(ref: ReferenceRecord): CslItem {
   };
   if (ref.year) item.issued = { "date-parts": [[ref.year]] };
   if (ref.journal) item["container-title"] = ref.journal;
+  // Vancouver, NEJM en AMA gebruiken de korte vorm; zonder afkorting valt citeproc terug op de volle naam.
+  if (ref.journal && ref.journalAbbrev) item["container-title-short"] = ref.journalAbbrev;
   if (ref.volume) item.volume = ref.volume;
   if (ref.issue) item.issue = ref.issue;
   if (ref.pages) item.page = ref.pages;

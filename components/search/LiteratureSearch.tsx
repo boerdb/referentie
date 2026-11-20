@@ -76,6 +76,7 @@ export function LiteratureSearch() {
             title: hit.title,
             year: hit.year,
             journal: hit.journal,
+            journalAbbrev: hit.journalAbbrev ?? null,
             doi: null,
             pmid: hit.pmid,
             url: hit.url,

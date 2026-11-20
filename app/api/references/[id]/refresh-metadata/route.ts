@@ -38,6 +38,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       abstract: metadata.abstract,
       year: metadata.year,
       journal: metadata.journal,
+      // Geen afkorting bij Crossref: undefined, dan vult updateReference hem zelf aan.
+      journalAbbrev: metadata.journalAbbrev || undefined,
       volume: metadata.volume,
       issue: metadata.issue,
       pages: metadata.pages,

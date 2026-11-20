@@ -13,6 +13,8 @@ export type ReferenceRecord = {
   abstract: string | null;
   year: number | null;
   journal: string | null;
+  /** Afgekorte tijdschriftnaam (NLM), bijv. "N Engl J Med". */
+  journalAbbrev: string | null;
   volume: string | null;
   issue: string | null;
   pages: string | null;
@@ -47,6 +49,7 @@ export type ReferenceInput = {
   abstract?: string | null;
   year?: number | null;
   journal?: string | null;
+  journalAbbrev?: string | null;
   volume?: string | null;
   issue?: string | null;
   pages?: string | null;

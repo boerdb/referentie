@@ -6,6 +6,7 @@ const TYPES = ["article", "book", "chapter", "conference", "thesis", "report", "
 /** Maximale lengtes volgens sql/schema.sql. */
 const TEXT_FIELDS = {
   journal: 512,
+  journalAbbrev: 255,
   volume: 64,
   issue: 64,
   pages: 64,

@@ -201,6 +201,7 @@ async function lookupCrossref(doi) {
       abstract,
       year: yearFromCrossref(work),
       journal: work["container-title"]?.[0]?.trim() || null,
+      journalAbbrev: work["short-container-title"]?.[0]?.trim() || null,
       volume: work.volume ?? null,
       issue: work.issue ?? null,
       pages: work.page ?? null,
@@ -239,6 +240,11 @@ async function lookupDoiOrg(doi) {
     abstract: work.abstract ? stripAbstractHtml(work.abstract) : null,
     year: yearFromCrossref(work),
     journal: journal?.trim() || null,
+    journalAbbrev:
+      (Array.isArray(work["container-title-short"])
+        ? work["container-title-short"][0]
+        : work["container-title-short"]
+      )?.trim() || null,
     volume: work.volume != null ? String(work.volume) : null,
     issue: work.issue != null ? String(work.issue) : null,
     pages: work.page ?? null,
@@ -425,14 +431,20 @@ async function insertReference(conn, userId, study, meta, doi) {
   const title = study.title?.trim() || meta?.title || "Zonder titel";
   const year = meta?.year ?? yearFromPublishedAt(study.publishedAt);
   const journal = study.source?.trim() || meta?.journal || null;
+  // Afkorting van Crossref alleen als de tijdschriftnaam dezelfde is; anders vult
+  // scripts/fill-journal-abbrevs.mjs hem later aan.
+  const journalAbbrev =
+    meta?.journalAbbrev && (!study.source?.trim() || journal?.toLowerCase() === meta.journal?.toLowerCase())
+      ? meta.journalAbbrev.slice(0, 255)
+      : null;
   const url = study.url?.trim() || meta?.url || null;
   const citeKey = String(study.id ?? "").trim().slice(0, 128) || null;
 
   await conn.query(
     `INSERT INTO ref_items (
-      id, user_id, type, title, abstract, year, journal, volume, issue, pages,
+      id, user_id, type, title, abstract, year, journal, journal_abbrev, volume, issue, pages,
       doi, url, pmid, cite_key, status, starred
-    ) VALUES (?, ?, 'article', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'unread', 0)`,
+    ) VALUES (?, ?, 'article', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'unread', 0)`,
     [
       id,
       userId,
@@ -440,6 +452,7 @@ async function insertReference(conn, userId, study, meta, doi) {
       meta?.abstract || null,
       year,
       journal,
+      journalAbbrev,
       meta?.volume ? String(meta.volume) : null,
       meta?.issue ? String(meta.issue) : null,
       meta?.pages ? String(meta.pages) : null,

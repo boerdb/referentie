@@ -143,6 +143,28 @@ export function MetadataSection({ reference }: { reference: ReferenceRecord }) {
   const replaceReference = useReplaceReference();
   const [doiEdit, setDoiEdit] = useState(reference.doi ?? "");
   const [refreshing, setRefreshing] = useState(false);
+  const [abbrevEdit, setAbbrevEdit] = useState(reference.journalAbbrev ?? "");
+  // Afkorting kan op de achtergrond binnenkomen (NLM) of via "Metadata ophalen" wijzigen.
+  const [shownAbbrev, setShownAbbrev] = useState(reference.journalAbbrev);
+  if (shownAbbrev !== reference.journalAbbrev) {
+    setShownAbbrev(reference.journalAbbrev);
+    setAbbrevEdit(reference.journalAbbrev ?? "");
+  }
+
+  async function saveAbbrev() {
+    const value = abbrevEdit.trim();
+    if (value === (reference.journalAbbrev ?? "")) return;
+    try {
+      const item = await patch.mutateAsync({
+        id: reference.id,
+        patch: { journalAbbrev: value || null },
+      });
+      setAbbrevEdit(item.journalAbbrev ?? "");
+      toast.success("Afkorting opgeslagen");
+    } catch (error) {
+      toast.error("Afkorting opslaan mislukt", error instanceof Error ? error.message : undefined);
+    }
+  }
 
   async function saveDoi() {
     try {
@@ -228,6 +250,27 @@ export function MetadataSection({ reference }: { reference: ReferenceRecord }) {
           <>
             <dt className="text-[var(--text-muted)]">Tijdschrift</dt>
             <dd className="max-sm:mb-2">{reference.journal}</dd>
+            <dt className="pt-1.5 text-[var(--text-muted)] max-sm:pt-0">Afkorting</dt>
+            <dd className="min-w-0 max-sm:mb-2">
+              <input
+                type="text"
+                className="input w-full min-w-0 max-w-full rounded-lg px-3 py-1.5 text-[0.8125rem]"
+                placeholder="bijv. N Engl J Med"
+                aria-label="Afgekorte tijdschriftnaam"
+                title="Voor Vancouver, NEJM en AMA. Leeg laten = volle naam."
+                value={abbrevEdit}
+                maxLength={255}
+                onChange={(e) => setAbbrevEdit(e.target.value)}
+                onBlur={() => void saveAbbrev()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") {
+                    setAbbrevEdit(reference.journalAbbrev ?? "");
+                    e.currentTarget.blur();
+                  }
+                }}
+              />
+            </dd>
           </>
         )}
         {reference.year && (

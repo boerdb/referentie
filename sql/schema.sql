@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS ref_items (
   abstract TEXT NULL,
   year SMALLINT NULL,
   journal VARCHAR(512) NULL,
+  journal_abbrev VARCHAR(255) NULL,
   volume VARCHAR(64) NULL,
   issue VARCHAR(64) NULL,
   pages VARCHAR(64) NULL,

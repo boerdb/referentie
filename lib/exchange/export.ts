@@ -26,6 +26,7 @@ export function toRis(refs: ReferenceRecord[]): string {
     }
     add("PY", ref.year);
     add("T2", ref.journal);
+    add("J2", ref.journalAbbrev);
     add("VL", ref.volume);
     add("IS", ref.issue);
     if (ref.pages) {
@@ -84,6 +85,7 @@ export function toBibtex(refs: ReferenceRecord[]): string {
             .join(" and "),
         ],
         [ref.type === "chapter" || ref.type === "conference" ? "booktitle" : "journal", ref.journal],
+        ["shortjournal", ref.type === "article" ? ref.journalAbbrev : null],
         ["year", ref.year],
         ["volume", ref.volume],
         ["number", ref.issue],

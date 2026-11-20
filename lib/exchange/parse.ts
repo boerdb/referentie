@@ -58,6 +58,10 @@ function pages(start?: string, end?: string): string | null {
 
 function compact(input: ReferenceInput): ReferenceInput | null {
   if (!input.title?.trim()) return null;
+  // Een "afkorting" die gelijk is aan de volle naam zegt niets; dan zoekt de app hem zelf op.
+  if (input.journalAbbrev && input.journalAbbrev.toLowerCase() === input.journal?.toLowerCase()) {
+    return { ...input, journalAbbrev: null };
+  }
   return input;
 }
 
@@ -96,6 +100,8 @@ export function parseRis(text: string): ReferenceInput[] {
       authors: all("AU", "A1").map(splitName),
       year: firstYear(get("PY", "Y1", "DA")),
       journal: get("T2", "JF", "JO", "JA", "J2") ?? null,
+      // EndNote zet de afkorting in J2; andere programma's in JA of JO (alleen als die afwijkt).
+      journalAbbrev: get("J2", "JA", "JO") ?? null,
       volume: get("VL") ?? null,
       issue: get("IS") ?? null,
       pages: pages(get("SP"), get("EP")),
@@ -164,6 +170,7 @@ export function parseMedline(text: string): ReferenceInput[] {
       authors,
       year: firstYear(get("DP")),
       journal: get("JT") ?? get("TA") ?? null,
+      journalAbbrev: get("TA") ?? null,
       volume: get("VI") ?? null,
       issue: get("IP") ?? null,
       pages: get("PG") ?? null,
@@ -296,6 +303,7 @@ export function parseBibtex(text: string): ReferenceInput[] {
         .map(splitName),
       year: firstYear(f("year") ?? f("date")),
       journal: f("journal") ?? f("journaltitle") ?? f("booktitle") ?? null,
+      journalAbbrev: f("shortjournal") ?? f("journal-abbrev") ?? f("journalabbrev") ?? null,
       volume: f("volume") ?? null,
       issue: f("number") ?? f("issue") ?? null,
       pages: f("pages")?.replace(/[–—]/g, "-") ?? null,

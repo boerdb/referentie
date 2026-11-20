@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getPool, withTransaction } from "@/lib/db/mysql";
+import { lookupJournalAbbrev } from "@/lib/doi/journal-abbrev";
 import { checkAndStoreRetraction } from "@/lib/doi/retraction";
 import { smartRulesToSql, type SmartRules } from "./smart";
 import { loadTagsFor, setReferenceTags } from "./tags";
@@ -14,6 +15,7 @@ type RefRow = RowDataPacket & {
   abstract: string | null;
   year: number | null;
   journal: string | null;
+  journal_abbrev: string | null;
   volume: string | null;
   issue: string | null;
   pages: string | null;
@@ -55,6 +57,7 @@ function mapRow(row: RefRow, authors: AuthorRow[], extras: Extras): ReferenceRec
     abstract: row.abstract,
     year: row.year,
     journal: row.journal,
+    journalAbbrev: row.journal_abbrev,
     volume: row.volume,
     issue: row.issue,
     pages: row.pages,
@@ -451,6 +454,34 @@ export async function findReferenceIdsByDois(
   return matches;
 }
 
+/**
+ * Vult een ontbrekende tijdschriftafkorting aan. Eerst van een ander artikel uit hetzelfde
+ * tijdschrift in de bibliotheek (direct), anders op de achtergrond via de NLM Catalog.
+ * Geeft de direct gevonden afkorting terug, of null.
+ */
+async function fillJournalAbbrev(userId: string, id: string, journal: string): Promise<string | null> {
+  const [rows] = await getPool().query<RowDataPacket[]>(
+    `SELECT journal_abbrev FROM ref_items
+     WHERE user_id = ? AND id <> ? AND journal = ? AND journal_abbrev IS NOT NULL AND journal_abbrev <> ''
+     GROUP BY journal_abbrev ORDER BY COUNT(*) DESC LIMIT 1`,
+    [userId, id, journal],
+  );
+  const known = rows[0]?.journal_abbrev as string | undefined;
+  const store = (abbrev: string) =>
+    getPool().query(
+      "UPDATE ref_items SET journal_abbrev = ? WHERE id = ? AND (journal_abbrev IS NULL OR journal_abbrev = '')",
+      [abbrev, id],
+    );
+  if (known) {
+    await store(known);
+    return known;
+  }
+  void lookupJournalAbbrev(journal)
+    .then((abbrev) => (abbrev ? store(abbrev) : undefined))
+    .catch((e) => console.warn("[journal-abbrev store]", e instanceof Error ? e.message : e));
+  return null;
+}
+
 export async function createReference(
   userId: string,
   input: ReferenceInput,
@@ -459,9 +490,9 @@ export async function createReference(
   await withTransaction(async (conn) => {
     await conn.query(
       `INSERT INTO ref_items (
-        id, user_id, type, title, abstract, year, journal, volume, issue, pages,
+        id, user_id, type, title, abstract, year, journal, journal_abbrev, volume, issue, pages,
         doi, url, pmid, cite_key, status, starred, label
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         userId,
@@ -470,6 +501,7 @@ export async function createReference(
         input.abstract?.trim() || null,
         input.year ?? null,
         input.journal?.trim() || null,
+        input.journalAbbrev?.trim() || null,
         input.volume?.trim() || null,
         input.issue?.trim() || null,
         input.pages?.trim() || null,
@@ -489,6 +521,10 @@ export async function createReference(
   if (!ref) throw new Error("Reference not found after insert");
   // Op de achtergrond kijken of het artikel is teruggetrokken.
   if (ref.doi) void checkAndStoreRetraction(ref.id, ref.doi);
+  if (ref.journal && !ref.journalAbbrev) {
+    const abbrev = await fillJournalAbbrev(userId, ref.id, ref.journal);
+    if (abbrev) return { ...ref, journalAbbrev: abbrev };
+  }
   return ref;
 }
 
@@ -496,6 +532,7 @@ export async function createReference(
 const NULLABLE_TEXT = {
   abstract: "abstract",
   journal: "journal",
+  journalAbbrev: "journal_abbrev",
   volume: "volume",
   issue: "issue",
   pages: "pages",
@@ -527,6 +564,11 @@ export async function updateReference(
   if (input.starred !== undefined && input.starred !== null) set("starred", input.starred ? 1 : 0);
   if (input.year !== undefined) set("year", input.year);
   if (input.label !== undefined) set("label", input.label);
+  // Ander tijdschrift zonder nieuwe afkorting: oude afkorting wissen (vóór journal zelf wijzigt).
+  if (input.journal !== undefined && input.journalAbbrev === undefined) {
+    sets.push("journal_abbrev = IF(journal <=> ?, journal_abbrev, NULL)");
+    params.push(input.journal?.trim() || null);
+  }
   for (const [key, column] of Object.entries(NULLABLE_TEXT) as [
     keyof typeof NULLABLE_TEXT,
     string,
@@ -553,7 +595,14 @@ export async function updateReference(
     return true;
   });
   if (found && input.doi) void checkAndStoreRetraction(id, input.doi);
-  return found ? getReference(userId, id) : null;
+  if (!found) return null;
+  const ref = await getReference(userId, id);
+  // Nieuwe tijdschriftnaam zonder afkorting: aanvullen zoals bij een nieuw artikel.
+  if (ref?.journal && !ref.journalAbbrev && input.journal !== undefined) {
+    const abbrev = await fillJournalAbbrev(userId, ref.id, ref.journal);
+    if (abbrev) return { ...ref, journalAbbrev: abbrev };
+  }
+  return ref;
 }
 
 /** Naar de prullenbak. */

@@ -66,7 +66,7 @@ export async function findDuplicateSets(userId: string): Promise<string[][]> {
   return [...sets.values()].filter((set) => set.length > 1);
 }
 
-const FILL_TEXT = ["abstract", "journal", "volume", "issue", "pages", "doi", "url", "pmid"];
+const FILL_TEXT = ["abstract", "journal", "journal_abbrev", "volume", "issue", "pages", "doi", "url", "pmid"];
 /** Getallen: NULLIF met '' geeft in strikte modus "Truncated incorrect DECIMAL value". */
 const FILL_NUMBERS = ["year", "label"];
 const STATUS_RANK = { unread: 0, reading: 1, read: 2 } as const;

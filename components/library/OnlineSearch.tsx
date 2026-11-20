@@ -71,6 +71,7 @@ export function OnlineSearch({
             title: hit.title,
             year: hit.year,
             journal: hit.journal,
+            journalAbbrev: hit.journalAbbrev ?? null,
             pmid: hit.pmid,
             url: hit.url,
             authors: hit.authors ? [{ familyName: hit.authors, givenName: "" }] : [],

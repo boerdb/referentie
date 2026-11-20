@@ -166,6 +166,7 @@ export function useInvalidateLibrary() {
 
 export type ReferencePatch = Partial<Pick<ReferenceRecord, "starred" | "status" | "label" | "tags">> & {
   doi?: string | null;
+  journalAbbrev?: string | null;
 };
 
 /** Optimistisch bijwerken: direct tonen, bij een fout terugzetten. */

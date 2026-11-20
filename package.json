@@ -18,6 +18,7 @@
     "db:migrate": "node scripts/db-migrate.mjs",
     "fulltext:backfill": "node scripts/fulltext-backfill.mjs",
     "retractions:check": "node scripts/retraction-check.mjs",
+    "journals:abbrev": "node scripts/fill-journal-abbrevs.mjs",
     "splash:generate": "node scripts/generate-splash.mjs"
   },
   "dependencies": {

@@ -20,6 +20,8 @@ export type SearchHit = {
   authors: string;
   year: number | null;
   journal: string | null;
+  /** Alleen PubMed geeft de NLM-afkorting mee. */
+  journalAbbrev?: string | null;
   doi: string | null;
   pmid: string | null;
   url: string | null;
@@ -132,6 +134,7 @@ async function searchPubMed(query: string, cursor: string): Promise<SearchResult
         authors: formatNames((article.authors ?? []).map((author) => author.name ?? "")),
         year: yearFrom(article.pubdate),
         journal: decodeText(article.fulljournalname || article.source || "") || null,
+        journalAbbrev: decodeText(article.source || "") || null,
         doi,
         pmid: uid,
         url: `https://pubmed.ncbi.nlm.nih.gov/${uid}/`,

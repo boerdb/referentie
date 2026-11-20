@@ -35,6 +35,7 @@ yarn-error.log*
 # uploads
 /data/pdfs/
 /data/studies-import.log
+/data/journal-abbrevs.log
 /data/studies-import.lock
 
 # typescript

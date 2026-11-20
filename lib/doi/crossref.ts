@@ -24,6 +24,7 @@ type CrossrefWork = {
   issued?: DateParts;
   created?: DateParts;
   "container-title"?: string[];
+  "short-container-title"?: string[];
   volume?: string;
   issue?: string;
   page?: string;
@@ -38,6 +39,7 @@ type CslWork = {
   DOI?: string;
   URL?: string;
   "container-title"?: string | string[];
+  "container-title-short"?: string | string[];
   volume?: string | number;
   issue?: string | number;
   page?: string;
@@ -81,6 +83,7 @@ function mapWork(work: CrossrefWork): ReferenceInput {
     abstract: work.abstract ? stripAbstractHtml(work.abstract) : null,
     year: yearFromWork(work),
     journal: work["container-title"]?.[0]?.trim() ?? null,
+    journalAbbrev: work["short-container-title"]?.[0]?.trim() || null,
     volume: work.volume ?? null,
     issue: work.issue ?? null,
     pages: work.page ?? null,
@@ -101,6 +104,7 @@ function mapCsl(work: CslWork): ReferenceInput {
     abstract: work.abstract ? stripAbstractHtml(work.abstract) : null,
     year: yearFromWork(work),
     journal: firstString(work["container-title"]),
+    journalAbbrev: firstString(work["container-title-short"]),
     volume: work.volume != null ? String(work.volume) : null,
     issue: work.issue != null ? String(work.issue) : null,
     pages: work.page ?? null,
@@ -176,7 +180,7 @@ async function fetchFromDoiOrg(doi: string): Promise<ReferenceInput> {
 
 async function cachedGet(doi: string): Promise<ReferenceInput | null> {
   try {
-    return await redisGet<ReferenceInput>(`doi:${doi.toLowerCase()}`);
+    return await redisGet<ReferenceInput>(`doi2:${doi.toLowerCase()}`);
   } catch (e) {
     console.warn("[doi-cache get]", e instanceof Error ? e.message : e);
     return null;
@@ -185,7 +189,7 @@ async function cachedGet(doi: string): Promise<ReferenceInput | null> {
 
 async function cachedSet(doi: string, value: ReferenceInput): Promise<void> {
   try {
-    await redisSetEx(`doi:${doi.toLowerCase()}`, value, CACHE_TTL);
+    await redisSetEx(`doi2:${doi.toLowerCase()}`, value, CACHE_TTL);
   } catch (e) {
     console.warn("[doi-cache set]", e instanceof Error ? e.message : e);
   }
@@ -229,6 +233,7 @@ function decodeFields(m: ReferenceInput): ReferenceInput {
     ...m,
     title: decodeEntities(m.title),
     journal: d(m.journal),
+    journalAbbrev: d(m.journalAbbrev),
     abstract: d(m.abstract),
     authors: m.authors?.map((a) => ({
       givenName: d(a.givenName) ?? "",
